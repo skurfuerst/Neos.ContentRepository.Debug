@@ -1,0 +1,15 @@
+{
+    "name": "neos/contentrepository-debug",
+    "type": "neos-package",
+    "description": "Debugger for Neos CR",
+    "license": "GPL-3.0+",
+    "require": {
+        "neos/contentrepository-core": "*",
+        "doctrine/dbal": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Neos\\ContentRepository\\Debug\\": "Classes"
+        }
+    }
+}
