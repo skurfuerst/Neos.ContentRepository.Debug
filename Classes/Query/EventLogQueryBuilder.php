@@ -26,35 +26,66 @@ class EventLogQueryBuilder
         return $this;
     }
 
+    public function whereSequenceNumberBetween(int $from, int $to, int $context = 0, int $contextBefore = 0, int $contextAfter = 0): self
+    {
+        $this->queryBuilder->setParameter('sequencenumber_ctx_before', $contextBefore ?: $context);
+        $this->queryBuilder->setParameter('sequencenumber_ctx_after', $contextAfter ?: $context);
+
+        $this->queryBuilder->andWhere('sequencenumber >= :sequencenumber_from - :sequencenumber_ctx_before')
+            ->setParameter('sequencenumber_from', $from);
+
+        $this->queryBuilder->andWhere('sequencenumber <= :sequencenumber_to + :sequencenumber_ctx_after')
+            ->setParameter('sequencenumber_to', $to);
+
+        // Add marker if there's any context
+        if ($context || $contextBefore || $contextAfter) {
+            $this->queryBuilder->addSelect("CASE 
+            WHEN sequencenumber >= :sequencenumber_from AND sequencenumber <= :sequencenumber_to THEN 'XXX'
+            ELSE ''
+        END AS mrk");
+        }
+
+        return $this;
+    }
+
     public function whereStreamNotLike(string $notLike): self
     {
         $this->queryBuilder->andWhere('stream NOT LIKE :stream_not_like')->setParameter('stream_not_like', $notLike);
         return $this;
     }
 
-    public function whereType(string ...$names): self
+    public function whereType(string ...$values): self
     {
-        if (empty($names)) {
+        $values = array_map(
+            EventFilter::eventClassNameToShortName(...),
+            $values
+        );
+
+        return $this->buildWhereInClause('type', $values);
+    }
+
+    public function whereStream(string ...$values)
+    {
+        return $this->buildWhereInClause('stream', $values);
+    }
+
+    private function buildWhereInClause(string $column, array $values): self
+    {
+        if (empty($values)) {
             return $this;
         }
 
-        $names = array_map(
-            EventFilter::eventClassNameToShortName(...),
-            $names
-        );
-
         // Build the IN clause with parameterized values
         $placeholders = [];
-        foreach ($names as $index => $name) {
-            $paramName = 'type_' . $index;
+        foreach ($values as $index => $value) {
+            $paramName = $column . '_' . $index;
             $placeholders[] = ':' . $paramName;
-            $this->queryBuilder->setParameter($paramName, $name);
+            $this->queryBuilder->setParameter($paramName, $value);
         }
 
         $this->queryBuilder->andWhere(
-            'type IN (' . implode(', ', $placeholders) . ')'
+            $column . ' IN (' . implode(', ', $placeholders) . ')'
         );
-
         return $this;
     }
 
@@ -99,6 +130,7 @@ class EventLogQueryBuilder
         $this->queryBuilder->addSelect('COUNT(*) as count');
         return $this;
     }
+
     public function execute(): Result
     {
         return $this->queryBuilder->executeQuery();
@@ -109,7 +141,8 @@ class EventLogQueryBuilder
         $this->queryBuilder
             ->addSelect('MIN(recordedat) as recordedat_min')
             ->addSelect('MAX(recordedat) as recordedat_max')
-            ->addSelect('MAX(recordedat)-MIN(recordedat) as recordedat_diff');
+            ->addSelect('MAX(recordedat)-MIN(recordedat) as recordedat_diff')
+            ->addOrderBy('recordedat_min');
         return $this;
     }
 
@@ -118,9 +151,14 @@ class EventLogQueryBuilder
         $this->queryBuilder
             ->addSelect('MIN(sequencenumber) as sequencenumber_min')
             ->addSelect('MAX(sequencenumber) as sequencenumber_max')
-            ->addSelect('MAX(sequencenumber)-MIN(sequencenumber) as sequencenumber_diff');
+            ->addSelect('MAX(sequencenumber)-MIN(sequencenumber) as sequencenumber_diff')
+            ->addOrderBy('sequencenumber_min');
         return $this;
     }
 
-
+    public function select(string ...$select): self
+    {
+        $this->queryBuilder->select(...$select);
+        return $this;
+    }
 }

@@ -6,6 +6,7 @@ use Doctrine\DBAL\Connection;
 use Neos\ContentRepository\Core\ContentRepository;
 use Neos\ContentRepository\Core\Factory\ContentRepositoryServiceInterface;
 use Neos\ContentRepository\Core\Service\ContentRepositoryMaintainerFactory;
+use Neos\ContentRepository\Core\Service\ContentStreamPrunerFactory;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Debug\InternalServices\EventStoreDebuggingInternalsFactory;
 use Neos\ContentRepository\Debug\InternalServices\LowLevelDatabaseUtil;
@@ -25,7 +26,7 @@ class ContentRepositoryDebugger
 
     public function __construct(
         private readonly ContentRepositoryRegistry $contentRepositoryRegistry,
-        public readonly Connection $db,
+        public readonly Connection                 $db,
     )
     {
         $this->lowLevelDatabaseUtil = new LowLevelDatabaseUtil($this->db);
@@ -129,6 +130,81 @@ class ContentRepositoryDebugger
         $table->setRows($rows);
         $table->render();
         echo $output->fetch();
+    }
+
+    public function printRecords(\Doctrine\DBAL\Result $queryResult, string $pivotBy = null): void
+    {
+        $rows = $queryResult->fetchAllAssociative();
+        $rows = DebugArrayUtils::pivot($rows, $pivotBy);
+
+        if (empty($rows)) {
+            echo "No results found.\n";
+            return;
+        }
+
+        $output = new BufferedOutput();
+
+        foreach ($rows as $index => $row) {
+            // Display record number/separator
+            $output->writeln(sprintf('<info>Record %d:</info>', $index + 1));
+
+            $table = new Table($output);
+            $table->setHeaders(['Field', 'Value']);
+
+            $tableRows = [];
+            foreach ($row as $key => $value) {
+                // Pretty-print JSON values
+                if (is_string($value) && self::isJson($value)) {
+                    $decoded = json_decode($value, true);
+                    $value = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                }
+
+                $tableRows[] = [$key, $value];
+            }
+
+            $table->setRows($tableRows);
+            $table->render();
+
+            // Add spacing between records
+            if ($index < count($rows) - 1) {
+                $output->writeln('');
+            }
+        }
+
+        echo $output->fetch();
+    }
+
+    private static function isJson(string $string): bool
+    {
+        if (empty($string) || !in_array($string[0], ['{', '['])) {
+            return false;
+        }
+
+        json_decode($string);
+        return json_last_error() === JSON_ERROR_NONE;
+    }
+
+
+    public function contentStreamStatus(): void
+    {
+        $contentStreamPruner = $this->contentRepositoryRegistry->buildService($this->contentRepository->id, new ContentStreamPrunerFactory());
+        $contentStreamPruner->outputStatus(function ($output = '') {
+            echo $output . "\n";
+        });
+    }
+
+    public function contentStreamRemoveDangling(): void
+    {
+        $contentStreamPruner = $this->contentRepositoryRegistry->buildService($this->contentRepository->id, new ContentStreamPrunerFactory());
+        $contentStreamPruner->outputStatus(function ($output = '') {
+            echo $output . "\n";
+        });
+        $contentStreamPruner->removeDanglingContentStreams(
+            function ($output) {
+                echo $output . "\n";
+            },
+            new \DateTimeImmutable('now')
+        );
     }
 
 }
