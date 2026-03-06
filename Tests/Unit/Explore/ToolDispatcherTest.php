@@ -7,7 +7,7 @@ namespace Neos\ContentRepository\Debug\Tests\Unit\Explore;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
 use Neos\ContentRepository\Debug\Explore\ToolContextRegistry;
 use Neos\ContentRepository\Debug\Explore\ToolDispatcher;
-use Neos\ContentRepository\Debug\Explore\IO\ToolIO;
+use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -99,6 +99,18 @@ class ToolDispatcherTest extends TestCase
 
         new ToolDispatcher($this->registry, [new UnknownParamTool()]);
     }
+
+    public function test_tool_context_parameter_is_always_accepted_and_injected(): void
+    {
+        $tool = new ContextPassthroughTool();
+        $dispatcher = new ToolDispatcher($this->registry, [$tool]);
+        $io = new FakeToolIO();
+        $ctx = ToolContext::empty()->with('node', new FakeNodeAggregateId('xyz'));
+
+        $dispatcher->execute($tool, $ctx, $io);
+
+        self::assertSame($ctx, $tool->receivedContext);
+    }
 }
 
 // --- Fake value objects ---
@@ -113,7 +125,7 @@ final class FakeNodeAggregateId
 final class AlwaysAvailableTool implements ToolInterface
 {
     public function getMenuLabel(ToolContext $context): string { return 'Always available'; }
-    public function execute(ToolIO $io): ?ToolContext { return null; }
+    public function execute(ToolIOInterface $io): ?ToolContext { return null; }
 }
 
 final class RequiresNodeTool implements ToolInterface
@@ -121,7 +133,7 @@ final class RequiresNodeTool implements ToolInterface
     public ?FakeNodeAggregateId $receivedNode = null;
 
     public function getMenuLabel(ToolContext $context): string { return 'Requires node'; }
-    public function execute(ToolIO $io, FakeNodeAggregateId $node): ?ToolContext
+    public function execute(ToolIOInterface $io, FakeNodeAggregateId $node): ?ToolContext
     {
         $this->receivedNode = $node;
         return null;
@@ -131,25 +143,36 @@ final class RequiresNodeTool implements ToolInterface
 final class OptionalNodeTool implements ToolInterface
 {
     public function getMenuLabel(ToolContext $context): string { return 'Optional node'; }
-    public function execute(ToolIO $io, ?FakeNodeAggregateId $node = null): ?ToolContext { return null; }
+    public function execute(ToolIOInterface $io, ?FakeNodeAggregateId $node = null): ?ToolContext { return null; }
 }
 
 final class ContextUpdatingTool implements ToolInterface
 {
     public function getMenuLabel(ToolContext $context): string { return 'Updates context'; }
-    public function execute(ToolIO $io): ?ToolContext
+    public function execute(ToolIOInterface $io): ?ToolContext
     {
         return ToolContext::empty()->with('node', new FakeNodeAggregateId('new'));
+    }
+}
+
+final class ContextPassthroughTool implements ToolInterface
+{
+    public ?ToolContext $receivedContext = null;
+    public function getMenuLabel(ToolContext $context): string { return 'Context passthrough'; }
+    public function execute(ToolIOInterface $io, ToolContext $context): ?ToolContext
+    {
+        $this->receivedContext = $context;
+        return null;
     }
 }
 
 final class UnknownParamTool implements ToolInterface
 {
     public function getMenuLabel(ToolContext $context): string { return 'Unknown param'; }
-    public function execute(ToolIO $io, \DateTimeImmutable $unknown): ?ToolContext { return null; }
+    public function execute(ToolIOInterface $io, \DateTimeImmutable $unknown): ?ToolContext { return null; }
 }
 
-final class FakeToolIO implements ToolIO
+final class FakeToolIO implements ToolIOInterface
 {
     public function writeTable(array $headers, array $rows): void {}
     public function writeKeyValue(array $pairs): void {}

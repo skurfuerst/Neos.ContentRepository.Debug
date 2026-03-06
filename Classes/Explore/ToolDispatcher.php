@@ -53,6 +53,12 @@ final class ToolDispatcher
         return $tool->execute(...$args);
     }
 
+    private function isFrameworkInjected(string $typeName): bool
+    {
+        return $typeName === ToolIOInterface::class
+            || $typeName === ToolContext::class;
+    }
+
     private function isAvailable(ToolInterface $tool, ToolContext $context): bool
     {
         $method = new \ReflectionMethod($tool, 'execute');
@@ -61,7 +67,7 @@ final class ToolDispatcher
             if (!$type instanceof \ReflectionNamedType) {
                 continue;
             }
-            if ($type->getName() === ToolIOInterface::class) {
+            if ($this->isFrameworkInjected($type->getName())) {
                 continue;
             }
             // Context-typed param: required (non-nullable, non-optional) → tool unavailable if absent
@@ -85,11 +91,16 @@ final class ToolDispatcher
                 $args[] = null;
                 continue;
             }
-            if ($type->getName() === ToolIOInterface::class) {
+            $typeName = $type->getName();
+            if ($typeName === ToolIOInterface::class) {
                 $args[] = $io;
                 continue;
             }
-            $args[] = $context->getByType($type->getName());
+            if ($typeName === ToolContext::class) {
+                $args[] = $context;
+                continue;
+            }
+            $args[] = $context->getByType($typeName);
         }
         return $args;
     }
@@ -103,16 +114,17 @@ final class ToolDispatcher
                 continue;
             }
             $typeName = $type->getName();
-            if ($typeName === ToolIOInterface::class) {
+            if ($this->isFrameworkInjected($typeName)) {
                 continue;
             }
             if ($this->registry->getByType($typeName) === null) {
                 throw new \LogicException(sprintf(
-                    'Tool %s::execute() parameter $%s has type %s which is neither %s nor a registered context type.',
+                    'Tool %s::execute() parameter $%s has type %s which is neither %s, %s, nor a registered context type.',
                     $tool::class,
                     $param->getName(),
                     $typeName,
                     ToolIOInterface::class,
+                    ToolContext::class,
                 ));
             }
         }

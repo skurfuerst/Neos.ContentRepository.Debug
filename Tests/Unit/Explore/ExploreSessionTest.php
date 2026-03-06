@@ -8,7 +8,7 @@ use Neos\ContentRepository\Debug\Explore\ExploreSession;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
 use Neos\ContentRepository\Debug\Explore\ToolContextRegistry;
 use Neos\ContentRepository\Debug\Explore\ToolDispatcher;
-use Neos\ContentRepository\Debug\Explore\IO\ToolIO;
+use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -80,7 +80,7 @@ final class FakeExitTool implements ToolInterface
 {
     public bool $wasExecuted = false;
     public function getMenuLabel(ToolContext $context): string { return 'Exit'; }
-    public function execute(ToolIO $io): ?ToolContext
+    public function execute(ToolIOInterface $io): ?ToolContext
     {
         $this->wasExecuted = true;
         return ExploreSession::$EXIT;
@@ -91,14 +91,14 @@ final class FakeIncrementTool implements ToolInterface
 {
     public int $executionCount = 0;
     public function getMenuLabel(ToolContext $context): string { return 'Increment'; }
-    public function execute(ToolIO $io, FakeCounter $counter): ?ToolContext
+    public function execute(ToolIOInterface $io, FakeCounter $counter): ?ToolContext
     {
         $this->executionCount++;
         return ToolContext::empty()->with('counter', new FakeCounter($counter->value + 1));
     }
 }
 
-final class ScriptedToolIO implements ToolIO
+final class ScriptedToolIO implements ToolIOInterface
 {
     /** @var list<string> */
     private array $choices;
