@@ -13,6 +13,6 @@ final readonly class EventStoreDebuggingInternalsFactory implements ContentRepos
 {
     public function build(ContentRepositoryServiceFactoryDependencies $serviceFactoryDependencies): ContentRepositoryServiceInterface
     {
-        return new EventStoreDebuggingInternals($serviceFactoryDependencies->eventStore);
+        return new EventStoreDebuggingInternals($serviceFactoryDependencies->eventStore, $serviceFactoryDependencies->subscriptionEngine);
     }
 }

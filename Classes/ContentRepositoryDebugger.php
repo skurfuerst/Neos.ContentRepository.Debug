@@ -11,6 +11,7 @@ use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryI
 use Neos\ContentRepository\Debug\DebugView\DebugViewCreator;
 use Neos\ContentRepository\Debug\InternalServices\EventStoreDebuggingInternalsFactory;
 use Neos\ContentRepository\Debug\InternalServices\LowLevelDatabaseUtil;
+use Neos\ContentRepository\Debug\ProjectionWatch\WatchList;
 use Neos\ContentRepository\Debug\Query\DebugQueryBuilder;
 use Neos\ContentRepository\Debug\Query\EventLogQueryBuilder;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
@@ -23,7 +24,8 @@ class ContentRepositoryDebugger
 {
 
     private readonly LowLevelDatabaseUtil $lowLevelDatabaseUtil;
-    private ContentRepository $contentRepository;
+    public readonly ContentRepository $contentRepository;
+    public readonly WatchList $watches;
 
     public function __construct(
         private readonly ContentRepositoryRegistry $contentRepositoryRegistry,
@@ -31,6 +33,7 @@ class ContentRepositoryDebugger
     )
     {
         $this->lowLevelDatabaseUtil = new LowLevelDatabaseUtil($this->db);
+        $this->watches = new WatchList();
     }
 
     public function execScriptFile(string $debugScriptFileName, ContentRepositoryId $contentRepositoryId): void
@@ -212,6 +215,52 @@ class ContentRepositoryDebugger
     {
         $debugViewCreator = new DebugViewCreator($this->db, $contentRepositoryId);
         $debugViewCreator->createDebugViews();
+    }
+
+    public function replayProjections(): void
+    {
+        $internals = $this->contentRepositoryRegistry->buildService($this->contentRepository->id, new EventStoreDebuggingInternalsFactory());
+
+        $printedCount = 0;
+        $printNewChanges = function () use (&$printedCount) {
+            $all = $this->watches->getChanges();
+            for ($i = $printedCount; $i < count($all); $i++) {
+                $c = $all[$i];
+                echo sprintf("  seq=%-6d  %-50s  %s: %s → %s\n", $c['seq'], $c['event'], $c['watch'], $c['from'], $c['to']);
+            }
+            $printedCount = count($all);
+        };
+
+        $prevEnvelope = null;
+        $internals->resetAndBoot(function (\Neos\EventStore\Model\EventEnvelope $e) use (&$prevEnvelope, $printNewChanges) {
+            if ($prevEnvelope !== null) {
+                $this->watches->evaluate($prevEnvelope);
+                $printNewChanges();
+            }
+            $prevEnvelope = $e;
+        });
+
+        if ($prevEnvelope !== null) {
+            $this->watches->evaluate($prevEnvelope);
+            $printNewChanges();
+        }
+
+        $this->watches->reset();
+    }
+
+    public function printArray(array $rows): void
+    {
+        if (empty($rows)) {
+            echo "No changes recorded.\n";
+            return;
+        }
+
+        $output = new BufferedOutput();
+        $table = new Table($output);
+        $table->setHeaders(array_keys($rows[0]));
+        $table->setRows($rows);
+        $table->render();
+        echo $output->fetch();
     }
 
 }

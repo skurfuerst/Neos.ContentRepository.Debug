@@ -3,6 +3,7 @@
 namespace Neos\ContentRepository\Debug\InternalServices;
 
 use Neos\ContentRepository\Core\Factory\ContentRepositoryServiceInterface;
+use Neos\ContentRepository\Core\Subscription\Engine\SubscriptionEngine;
 use Neos\EventStore\EventStoreInterface;
 use Neos\EventStore\Model\Event\SequenceNumber;
 use Neos\EventStore\Model\EventStream\VirtualStreamName;
@@ -10,7 +11,8 @@ use Neos\EventStore\Model\EventStream\VirtualStreamName;
 final readonly class EventStoreDebuggingInternals implements ContentRepositoryServiceInterface
 {
     public function __construct(
-        private EventStoreInterface $eventStore
+        private EventStoreInterface $eventStore,
+        private SubscriptionEngine $subscriptionEngine,
     )
     {
     }
@@ -21,5 +23,11 @@ final readonly class EventStoreDebuggingInternals implements ContentRepositorySe
             return $eventEnvelope->sequenceNumber;
         }
         return SequenceNumber::none();
+    }
+
+    public function resetAndBoot(\Closure $progressCallback): void
+    {
+        $this->subscriptionEngine->reset();
+        $this->subscriptionEngine->boot(progressCallback: $progressCallback, batchSize: 1);
     }
 }
