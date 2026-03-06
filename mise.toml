@@ -1,3 +1,12 @@
+[tasks.lint]
+description = "Syntax-check all PHP files in this package (poor man's linter)"
+run = '''
+  docker compose -f ../../../docker-compose.yml exec -T neos bash -c \
+    'find /app/DistributionPackages/Neos.ContentRepository.Debug/Classes \
+          /app/DistributionPackages/Neos.ContentRepository.Debug/Tests \
+          -name "*.php" -exec php -l {} \; 2>&1 | { grep -v "^No syntax errors" || true; }'
+'''
+
 [tasks.test]
 description = "Run all unit tests for this package"
 run = 'docker compose -f ../../../docker-compose.yml exec neos bash -c "cd /app && bin/phpunit -c Build/BuildEssentials/PhpUnit/UnitTests.xml --colors DistributionPackages/Neos.ContentRepository.Debug/Tests/Unit/"'

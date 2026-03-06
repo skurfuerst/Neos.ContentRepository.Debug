@@ -1,9 +1,9 @@
 - THIS is a NEOS/FLOW Package!!!
-- Run all unit tests: `mise run test` (from this package directory)
+- Lint (syntax check all PHP files): `mise run lint`
+- Run all unit tests: `mise run test`
 - Run a specific test file: `mise run test:unit Tests/Unit/Explore/ToolContextTest.php`
-- Raw command if needed: `docker compose exec neos bash -c "cd /app && bin/phpunit -c Build/BuildEssentials/PhpUnit/UnitTests.xml --colors DistributionPackages/Neos.ContentRepository.Debug/Tests/Unit/"`
-
-- TRY TO NOT RUN RAW COMMANDS, but instead update mise tools instead (auditability - and ASK before updating mise tool defs.).
+- **Always lint before and after editing PHP files.**
+- TRY TO NOT RUN RAW COMMANDS — use mise tasks instead. ASK before changing mise task definitions.
 
 Coding practices:
 - Either add a short "why" comment at the doc comment of a class, or add a "@see [classname-with-why-comment] for context" comment accordingly.

@@ -4,22 +4,32 @@ declare(strict_types=1);
 
 namespace Neos\ContentRepository\Debug\Explore;
 
-use Neos\ContentRepository\Debug\Explore\IO\ToolIO;
+use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 
 /**
- * @internal Transport-agnostic session loop — create a ToolIO implementation and call run() to drive a session.
+ * @internal Transport-agnostic session loop — construct with a {@see ToolDispatcher}, then call run()
+ *           with a {@see ToolIOInterface} implementation to drive a session over any transport.
  */
 final class ExploreSession
 {
     /**
-     * Sentinel value returned by a tool's execute() to signal session exit.
-     * Use `return ExploreSession::EXIT;` in an exit tool.
+     * Sentinel value: return this from a tool's execute() to end the session.
+     *
+     * Recognised by identity (===) in {@see ExploreSession::run}.
+     * Initialised at file load time below the class definition.
+     *
+     * Usage in an exit tool:
+     * ```php
+     * public function execute(ToolIOInterface $io): ?ToolContext {
+     *     return ExploreSession::$EXIT;
+     * }
+     * ```
      */
     public static ToolContext $EXIT;
 
     public function __construct(private readonly ToolDispatcher $dispatcher) {}
 
-    public function run(ToolContext $context, ToolIO $io): void
+    public function run(ToolContext $context, ToolIOInterface $io): void
     {
         while (true) {
             $available = $this->dispatcher->availableTools($context);
@@ -45,5 +55,5 @@ final class ExploreSession
     }
 }
 
-// Initialise the EXIT sentinel as a distinct ToolContext instance.
+// Initialised here so the sentinel is a stable object identity across all usages.
 ExploreSession::$EXIT = ToolContext::empty();

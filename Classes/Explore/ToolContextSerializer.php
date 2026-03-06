@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace Neos\ContentRepository\Debug\Explore;
 
 /**
- * @internal Converts ToolContext to/from CLI argument strings using the registry's callbacks.
+ * @internal Converts a {@see ToolContext} to/from an associative string array for CLI arguments,
+ *           using the {@see ToolContextRegistry}'s fromString/toString callbacks.
  */
 final class ToolContextSerializer
 {
     public function __construct(private readonly ToolContextRegistry $registry) {}
 
-    /** @return array<string, string> name => stringValue */
+    /**
+     * @return array<string, string> name => serialised string value
+     */
     public function serialize(ToolContext $context): array
     {
         $result = [];
@@ -24,7 +27,9 @@ final class ToolContextSerializer
         return $result;
     }
 
-    /** @param array<string, string> $strings name => stringValue */
+    /**
+     * @param array<string, string> $strings name => serialised string value
+     */
     public function deserialize(array $strings): ToolContext
     {
         $ctx = ToolContext::empty();

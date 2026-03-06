@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Neos\ContentRepository\Debug\Explore;
 
-use Neos\ContentRepository\Debug\Explore\IO\ToolIO;
+use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 
 /**
- * @internal Reflection-based tool availability matching and invocation — tool authors never reference this.
+ * @internal Matches tools against the current {@see ToolContext} by reflecting on execute() parameter types,
+ *           then invokes the selected tool with resolved arguments — tool authors never reference this directly.
+ *
+ * @see ToolInterface for the execute() signature contract.
  */
 final class ToolDispatcher
 {
@@ -17,7 +20,8 @@ final class ToolDispatcher
 
     /**
      * @param iterable<ToolInterface> $tools
-     * @throws \LogicException if any tool's execute() has an unrecognised parameter type
+     * @throws \LogicException if any tool's execute() declares a parameter type that is neither
+     *                         {@see ToolIOInterface} nor a type registered in {@see ToolContextRegistry}.
      */
     public function __construct(
         private readonly ToolContextRegistry $registry,
@@ -43,7 +47,7 @@ final class ToolDispatcher
         return $available;
     }
 
-    public function execute(ToolInterface $tool, ToolContext $context, ToolIO $io): ?ToolContext
+    public function execute(ToolInterface $tool, ToolContext $context, ToolIOInterface $io): ?ToolContext
     {
         $args = $this->resolveArgs($tool, $context, $io);
         return $tool->execute(...$args);
@@ -57,13 +61,12 @@ final class ToolDispatcher
             if (!$type instanceof \ReflectionNamedType) {
                 continue;
             }
-            $typeName = $type->getName();
-            if ($typeName === ToolIO::class) {
+            if ($type->getName() === ToolIOInterface::class) {
                 continue;
             }
-            // It's a context type — required if not nullable/optional
+            // Context-typed param: required (non-nullable, non-optional) → tool unavailable if absent
             if (!$param->isOptional() && !$type->allowsNull()) {
-                if (!$context->hasByType($typeName)) {
+                if (!$context->hasByType($type->getName())) {
                     return false;
                 }
             }
@@ -72,7 +75,7 @@ final class ToolDispatcher
     }
 
     /** @return list<mixed> */
-    private function resolveArgs(ToolInterface $tool, ToolContext $context, ToolIO $io): array
+    private function resolveArgs(ToolInterface $tool, ToolContext $context, ToolIOInterface $io): array
     {
         $method = new \ReflectionMethod($tool, 'execute');
         $args = [];
@@ -82,12 +85,11 @@ final class ToolDispatcher
                 $args[] = null;
                 continue;
             }
-            $typeName = $type->getName();
-            if ($typeName === ToolIO::class) {
+            if ($type->getName() === ToolIOInterface::class) {
                 $args[] = $io;
                 continue;
             }
-            $args[] = $context->getByType($typeName);
+            $args[] = $context->getByType($type->getName());
         }
         return $args;
     }
@@ -101,16 +103,16 @@ final class ToolDispatcher
                 continue;
             }
             $typeName = $type->getName();
-            if ($typeName === ToolIO::class) {
+            if ($typeName === ToolIOInterface::class) {
                 continue;
             }
-            // Must be a registered context type
             if ($this->registry->getByType($typeName) === null) {
                 throw new \LogicException(sprintf(
-                    'Tool %s::execute() parameter $%s has type %s which is neither ToolIO nor a registered context type.',
+                    'Tool %s::execute() parameter $%s has type %s which is neither %s nor a registered context type.',
                     $tool::class,
                     $param->getName(),
                     $typeName,
+                    ToolIOInterface::class,
                 ));
             }
         }

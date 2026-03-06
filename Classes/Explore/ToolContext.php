@@ -4,6 +4,13 @@ declare(strict_types=1);
 
 namespace Neos\ContentRepository\Debug\Explore;
 
+/**
+ * @api Immutable bag of typed context values keyed by registered name — passed to every tool and updated between steps.
+ *
+ * Values are looked up by name ({@see ToolContext::get}) or by PHP class ({@see ToolContext::getByType},
+ * used internally by {@see ToolDispatcher}).
+ * New instances are created via {@see ToolContext::with} / {@see ToolContext::without} — never mutated.
+ */
 final class ToolContext
 {
     /** @param array<string, object> $values */
@@ -36,7 +43,9 @@ final class ToolContext
         return isset($this->values[$name]);
     }
 
-    /** @internal Used by ToolDispatcher */
+    /**
+     * @internal Used by {@see ToolDispatcher} to resolve execute() parameters by PHP class name.
+     */
     public function getByType(string $fqcn): ?object
     {
         foreach ($this->values as $value) {
@@ -47,7 +56,9 @@ final class ToolContext
         return null;
     }
 
-    /** @internal Used by ToolDispatcher */
+    /**
+     * @internal Used by {@see ToolDispatcher} to check tool availability.
+     */
     public function hasByType(string $fqcn): bool
     {
         return $this->getByType($fqcn) !== null;
