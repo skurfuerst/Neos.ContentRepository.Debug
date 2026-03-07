@@ -6,9 +6,7 @@ namespace Neos\ContentRepository\Debug\Tests\Unit\Explore\Tool\Entry;
 
 use Neos\ContentRepository\Debug\Explore\ToolContext;
 use Neos\ContentRepository\Debug\Explore\ToolContextRegistry;
-use Neos\ContentRepository\Debug\Explore\ToolDispatcher;
 use Neos\ContentRepository\Debug\Explore\Tool\Entry\SetNodeByUuidTool;
-use Neos\ContentRepository\Debug\Explore\Tool\Entry\GoBackTool;
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -32,10 +30,7 @@ class EntryToolsTest extends TestCase
 
     public function test_set_node_asks_for_uuid_and_sets_node_in_context(): void
     {
-        $tool = new SetNodeByUuidTool(
-            nodeContextName: 'node',
-            nodeFromString: fn(string $s) => new FakeNodeId($s),
-        );
+        $tool = new SetNodeByUuidTool($this->registry);
         $io = new AskingToolIO('abc-123');
 
         $result = $tool->execute($io, ToolContext::empty());
@@ -48,10 +43,7 @@ class EntryToolsTest extends TestCase
 
     public function test_set_node_preserves_existing_context_slots(): void
     {
-        $tool = new SetNodeByUuidTool(
-            nodeContextName: 'node',
-            nodeFromString: fn(string $s) => new FakeNodeId($s),
-        );
+        $tool = new SetNodeByUuidTool($this->registry);
         $io = new AskingToolIO('new-uuid');
         $ctx = ToolContext::empty()->with('other', new \stdClass());
 
@@ -62,26 +54,6 @@ class EntryToolsTest extends TestCase
         self::assertTrue($result->has('node'));
     }
 
-    // --- GoBackTool ---
-
-    public function test_go_back_removes_node_from_context(): void
-    {
-        $tool = new GoBackTool(contextNameToRemove: 'node');
-        $io = new AskingToolIO('');
-        $ctx = ToolContext::empty()->with('node', new FakeNodeId('abc'));
-
-        $result = $tool->execute($io, $ctx);
-
-        self::assertNotNull($result);
-        self::assertFalse($result->has('node'));
-    }
-
-    public function test_go_back_label_shows_what_will_be_removed(): void
-    {
-        $tool = new GoBackTool(contextNameToRemove: 'node');
-        $ctx = ToolContext::empty()->with('node', new FakeNodeId('abc'));
-        self::assertStringContainsString('node', $tool->getMenuLabel($ctx));
-    }
 }
 
 // --- Fakes ---

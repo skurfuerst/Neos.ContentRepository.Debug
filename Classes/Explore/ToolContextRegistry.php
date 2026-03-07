@@ -3,12 +3,15 @@
 declare(strict_types=1);
 
 namespace Neos\ContentRepository\Debug\Explore;
+use Neos\Flow\Annotations as Flow;
 
 /**
  * @api Call {@see ToolContextRegistry::register} in your package's Package.php to introduce new context dimensions.
  *
  * All lookup methods are {@internal} and used only by {@see ToolDispatcher} and {@see ToolContextSerializer}.
  */
+
+#[Flow\Scope("singleton")]
 final class ToolContextRegistry
 {
     /** @var array<string, ToolContextTypeDescriptor> keyed by name */

@@ -5,6 +5,11 @@
 - **Always lint before and after editing PHP files.**
 - TRY TO NOT RUN RAW COMMANDS — use mise tasks instead. ASK before changing mise task definitions.
 
+
+Neos/Flow:
+- If you need pointers about current Neos/Flow best practices, ASK. The user is a Neos/Flow expert.
+- prefer Flow annotations over Objects.yaml
+
 Coding practices:
 - Either add a short "why" comment at the doc comment of a class, or add a "@see [classname-with-why-comment] for context" comment accordingly.
 - in PHPdocs, if referencing other classes, use {@see [classname]} so that it is auto-clickable in IDEs.

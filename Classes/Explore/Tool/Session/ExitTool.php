@@ -12,6 +12,7 @@ use Neos\ContentRepository\Debug\Explore\ToolContext;
 /**
  * @internal Always-available tool that signals session exit via {@see ExploreSession::$EXIT}.
  */
+
 final class ExitTool implements ToolInterface
 {
     public function getMenuLabel(ToolContext $context): string

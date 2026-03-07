@@ -13,6 +13,7 @@ use Neos\ContentRepository\Debug\Explore\ToolContextSerializer;
  * @internal Always-available tool that prints the CLI invocation needed to resume the current session.
  *           Uses {@see ToolContextSerializer} to serialise all context slots into --name=value flags.
  */
+
 final class ShowResumeCommandTool implements ToolInterface
 {
     public function __construct(private readonly ToolContextSerializer $serializer) {}

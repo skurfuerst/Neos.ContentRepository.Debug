@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace Neos\ContentRepository\Debug\Explore;
 
+use Neos\Flow\Annotations as Flow;
+
 /**
  * @api Immutable bag of typed context values keyed by registered name — passed to every tool and updated between steps.
  *
  * Values are looked up by name ({@see ToolContext::get}) or by PHP class ({@see ToolContext::getByType},
  * used internally by {@see ToolDispatcher}).
  * New instances are created via {@see ToolContext::with} / {@see ToolContext::without} — never mutated.
+ * @Flow\Proxy(false)
  */
+
 final class ToolContext
 {
     /** @param array<string, object> $values */

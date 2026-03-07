@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace Neos\ContentRepository\Debug\Explore;
 
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
+use Neos\Flow\Annotations as Flow;
 
 /**
  * @internal Transport-agnostic session loop — construct with a {@see ToolDispatcher}, then call run()
  *           with a {@see ToolIOInterface} implementation to drive a session over any transport.
+ * @Flow\Proxy(false)
  */
+
 final class ExploreSession
 {
     /**

@@ -7,20 +7,15 @@ namespace Neos\ContentRepository\Debug\Explore\Tool\Entry;
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
+use Neos\ContentRepository\Debug\Explore\ToolContextRegistry;
 
 /**
- * @internal Prompts for a node UUID, creates the value object via the provided factory, and sets it in context.
- *           Concrete subclasses (or the DI-wired instance) supply the context name and factory.
+ * @internal Prompts for a node UUID and sets the 'node' context value using the registry's fromString callback.
  */
+
 final class SetNodeByUuidTool implements ToolInterface
 {
-    /**
-     * @param callable(string): object $nodeFromString
-     */
-    public function __construct(
-        private readonly string $nodeContextName,
-        private readonly mixed $nodeFromString,
-    ) {}
+    public function __construct(private readonly ToolContextRegistry $registry) {}
 
     public function getMenuLabel(ToolContext $context): string
     {
@@ -29,7 +24,12 @@ final class SetNodeByUuidTool implements ToolInterface
 
     public function execute(ToolIOInterface $io, ToolContext $context): ?ToolContext
     {
+        $descriptor = $this->registry->getByName('node');
+        if ($descriptor === null) {
+            $io->writeError('Context type "node" is not registered.');
+            return null;
+        }
         $uuid = $io->ask('Enter node UUID:');
-        return $context->with($this->nodeContextName, ($this->nodeFromString)($uuid));
+        return $context->with('node', $descriptor->fromString($uuid));
     }
 }

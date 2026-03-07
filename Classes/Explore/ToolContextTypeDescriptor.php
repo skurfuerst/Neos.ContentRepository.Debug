@@ -7,6 +7,7 @@ namespace Neos\ContentRepository\Debug\Explore;
 /**
  * @internal Carries the metadata for one registered context dimension — owned and looked up by {@see ToolContextRegistry}.
  */
+
 readonly final class ToolContextTypeDescriptor
 {
     /**

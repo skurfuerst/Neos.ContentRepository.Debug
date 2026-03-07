@@ -25,6 +25,7 @@ use Neos\ContentRepository\Debug\Explore\ToolContext;
  * public function execute(ToolIOInterface $io, NodeAggregateId $node, ?DimensionSpacePoint $dsp = null): ?ToolContext
  * ```
  */
+
 interface ToolInterface
 {
     /**

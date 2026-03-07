@@ -14,3 +14,11 @@ run = 'docker compose -f ../../../docker-compose.yml exec neos bash -c "cd /app 
 [tasks."test:unit"]
 description = "Run a specific unit test file (usage: mise run test:unit Tests/Unit/Explore/ToolContextTest.php)"
 run = 'docker compose -f ../../../docker-compose.yml exec neos bash -c "cd /app && bin/phpunit -c Build/BuildEssentials/PhpUnit/UnitTests.xml --colors DistributionPackages/Neos.ContentRepository.Debug/$1"'
+
+[tasks."cr:explore"]
+description = "Run the interactive CR explorer (pass args after --: mise run cr:explore -- --node=abc)"
+run = 'docker compose -f ../../../docker-compose.yml exec neos bash -c "cd /app && ./flow cr:explore $@"'
+
+[tasks."test:functional"]
+description = "Run functional tests (usage: mise run test:functional [Tests/Functional/Explore/ExploreSmokeTest.php])"
+run = 'docker compose -f ../../../docker-compose.yml exec -e FLOW_CONTEXT=Testing neos bash -c "cd /app && bin/phpunit -c Build/BuildEssentials/PhpUnit/FunctionalTests.xml --colors DistributionPackages/Neos.ContentRepository.Debug/${1:-Tests/Functional/}"'

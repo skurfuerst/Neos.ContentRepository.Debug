@@ -8,6 +8,7 @@ namespace Neos\ContentRepository\Debug\Explore;
  * @internal Converts a {@see ToolContext} to/from an associative string array for CLI arguments,
  *           using the {@see ToolContextRegistry}'s fromString/toString callbacks.
  */
+
 final class ToolContextSerializer
 {
     public function __construct(private readonly ToolContextRegistry $registry) {}
