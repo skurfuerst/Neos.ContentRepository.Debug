@@ -5,30 +5,30 @@ declare(strict_types=1);
 namespace Neos\ContentRepository\Debug\Explore;
 
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
-use Neos\Flow\Annotations as Flow;
 
 /**
  * @internal Transport-agnostic session loop — construct with a {@see ToolDispatcher}, then call run()
  *           with a {@see ToolIOInterface} implementation to drive a session over any transport.
- * @Flow\Proxy(false)
  */
-
 final class ExploreSession
 {
+    private static ?ToolContext $exitSentinel = null;
+
     /**
      * Sentinel value: return this from a tool's execute() to end the session.
-     *
      * Recognised by identity (===) in {@see ExploreSession::run}.
-     * Initialised at file load time below the class definition.
      *
      * Usage in an exit tool:
      * ```php
      * public function execute(ToolIOInterface $io): ?ToolContext {
-     *     return ExploreSession::$EXIT;
+     *     return ExploreSession::exit();
      * }
      * ```
      */
-    public static ToolContext $EXIT;
+    public static function exit(): ToolContext
+    {
+        return self::$exitSentinel ??= ToolContext::empty();
+    }
 
     public function __construct(private readonly ToolDispatcher $dispatcher) {}
 
@@ -47,7 +47,7 @@ final class ExploreSession
 
             $result = $this->dispatcher->execute($tool, $context, $io);
 
-            if ($result === self::$EXIT) {
+            if ($result === self::exit()) {
                 return;
             }
 
@@ -57,6 +57,3 @@ final class ExploreSession
         }
     }
 }
-
-// Initialised here so the sentinel is a stable object identity across all usages.
-ExploreSession::$EXIT = ToolContext::empty();

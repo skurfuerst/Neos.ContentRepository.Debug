@@ -55,7 +55,7 @@ class ToolContextRegistryTest extends TestCase
 
         $serializer = new ToolContextSerializer($this->registry);
         $strings = $serializer->serialize($ctx);
-        $restored = $serializer->deserialize($strings);
+        $restored = $serializer->deserialize(ToolContext::create($this->registry), $strings);
 
         self::assertTrue($restored->has('node'));
         $restoredNode = $restored->get('node');

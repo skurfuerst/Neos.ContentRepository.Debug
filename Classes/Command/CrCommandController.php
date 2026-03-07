@@ -77,7 +77,7 @@ class CrCommandController extends CommandController
 
         // -- Build initial context from CLI args --
         $serializer = new ToolContextSerializer($registry);
-        $ctx = $serializer->deserialize(array_filter([
+        $ctx = $serializer->deserialize(ToolContext::create($registry), array_filter([
             'cr' => $contentRepository,
             'node' => $node,
             'workspace' => $workspace,
@@ -86,9 +86,7 @@ class CrCommandController extends CommandController
 
         // -- Build tools --
         $tools = [
-            new SetNodeByUuidTool(
-                $registry,
-            ),
+            new SetNodeByUuidTool(),
             new ShowResumeCommandTool($serializer),
             new ExitTool(),
         ];

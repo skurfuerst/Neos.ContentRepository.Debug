@@ -6,14 +6,11 @@ namespace Neos\ContentRepository\Debug\Explore;
 
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
-use Neos\Flow\Annotations as Flow;
-
 /**
  * @internal Matches tools against the current {@see ToolContext} by reflecting on execute() parameter types,
  *           then invokes the selected tool with resolved arguments — tool authors never reference this directly.
  *
  * @see ToolInterface for the execute() signature contract.
- * @Flow\Proxy(false)
  */
 
 final class ToolDispatcher

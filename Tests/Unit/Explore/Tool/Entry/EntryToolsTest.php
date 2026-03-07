@@ -26,14 +26,12 @@ class EntryToolsTest extends TestCase
         );
     }
 
-    // --- SetNodeByUuidTool ---
-
     public function test_set_node_asks_for_uuid_and_sets_node_in_context(): void
     {
-        $tool = new SetNodeByUuidTool($this->registry);
+        $tool = new SetNodeByUuidTool();
         $io = new AskingToolIO('abc-123');
 
-        $result = $tool->execute($io, ToolContext::empty());
+        $result = $tool->execute($io, ToolContext::create($this->registry));
 
         self::assertNotNull($result);
         $node = $result->get('node');
@@ -43,9 +41,9 @@ class EntryToolsTest extends TestCase
 
     public function test_set_node_preserves_existing_context_slots(): void
     {
-        $tool = new SetNodeByUuidTool($this->registry);
+        $tool = new SetNodeByUuidTool();
         $io = new AskingToolIO('new-uuid');
-        $ctx = ToolContext::empty()->with('other', new \stdClass());
+        $ctx = ToolContext::create($this->registry)->with('other', new \stdClass());
 
         $result = $tool->execute($io, $ctx);
 
@@ -53,7 +51,6 @@ class EntryToolsTest extends TestCase
         self::assertTrue($result->has('other'));
         self::assertTrue($result->has('node'));
     }
-
 }
 
 // --- Fakes ---

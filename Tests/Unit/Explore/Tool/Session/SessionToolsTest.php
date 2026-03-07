@@ -27,7 +27,7 @@ class SessionToolsTest extends TestCase
     {
         $tool = new ExitTool();
         $result = $tool->execute(new SpyToolIO());
-        self::assertSame(ExploreSession::$EXIT, $result);
+        self::assertSame(ExploreSession::exit(), $result);
     }
 
     // --- ShowResumeCommandTool ---

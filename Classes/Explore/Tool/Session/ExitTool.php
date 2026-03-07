@@ -10,7 +10,7 @@ use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
 
 /**
- * @internal Always-available tool that signals session exit via {@see ExploreSession::$EXIT}.
+ * @internal Always-available tool that signals session exit via {@see ExploreSession::exit()}.
  */
 
 final class ExitTool implements ToolInterface
@@ -22,6 +22,6 @@ final class ExitTool implements ToolInterface
 
     public function execute(ToolIOInterface $io): ?ToolContext
     {
-        return ExploreSession::$EXIT;
+        return ExploreSession::exit();
     }
 }

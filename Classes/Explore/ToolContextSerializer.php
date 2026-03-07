@@ -31,9 +31,9 @@ final class ToolContextSerializer
     /**
      * @param array<string, string> $strings name => serialised string value
      */
-    public function deserialize(array $strings): ToolContext
+    public function deserialize(ToolContext $base, array $strings): ToolContext
     {
-        $ctx = ToolContext::empty();
+        $ctx = $base;
         foreach ($strings as $name => $stringValue) {
             $descriptor = $this->registry->getByName($name);
             if ($descriptor !== null) {

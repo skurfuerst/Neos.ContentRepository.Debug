@@ -83,7 +83,7 @@ final class FakeExitTool implements ToolInterface
     public function execute(ToolIOInterface $io): ?ToolContext
     {
         $this->wasExecuted = true;
-        return ExploreSession::$EXIT;
+        return ExploreSession::exit();
     }
 }
 
