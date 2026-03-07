@@ -41,6 +41,9 @@ final class ExploreSession
 
     public function run(ToolContext $context, ToolIOInterface $io): void
     {
+        /** @var array<class-string, true>|null $previousToolSet null on first iteration (don't mark anything as new) */
+        $previousToolSet = null;
+
         while (true) {
             if ($this->contextRenderer !== null) {
                 ($this->contextRenderer)($context, $io);
@@ -50,11 +53,23 @@ final class ExploreSession
 
             $choices = [];
             foreach ($available as $i => $tool) {
-                $choices[(string)$i] = $tool->getMenuLabel($context);
+                $label = $tool->getMenuLabel($context);
+                if ($previousToolSet !== null && !isset($previousToolSet[$tool::class])) {
+                    $label = '★ ' . $label;
+                }
+                $choices[(string)$i] = $label;
+            }
+
+            $previousToolSet = [];
+            foreach ($available as $tool) {
+                $previousToolSet[$tool::class] = true;
             }
 
             $selected = $io->choose('Choose a tool', $choices);
             $tool = $available[(int)$selected];
+
+            $io->writeLine('');
+            $io->writeLine('--- ' . $tool->getMenuLabel($context) . ' ---');
 
             $result = $this->dispatcher->execute($tool, $context, $io);
 

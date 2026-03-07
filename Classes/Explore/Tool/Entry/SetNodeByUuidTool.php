@@ -21,6 +21,7 @@ final class SetNodeByUuidTool implements ToolInterface
     public function execute(ToolIOInterface $io, ToolContext $context): ?ToolContext
     {
         $uuid = $io->ask('Enter node UUID:');
+        $io->writeLine(sprintf('✔ Node set to: %s', $uuid));
         return $context->withFromString('node', $uuid);
     }
 }
