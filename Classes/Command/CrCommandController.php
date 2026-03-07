@@ -3,14 +3,22 @@
 namespace Neos\ContentRepository\Debug\Command;
 
 use Doctrine\DBAL\Connection;
+use Neos\ContentRepository\Core\ContentRepository;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
+use Neos\ContentRepository\Core\Projection\ContentGraph\ContentGraphInterface;
+use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepository\Debug\ContentRepositoryDebugger;
 use Neos\ContentRepository\Debug\Explore\ExploreSession;
 use Neos\ContentRepository\Debug\Explore\IO\CliToolIO;
+use Neos\ContentRepository\Debug\Explore\Tool\Entry\ChooseDimensionTool;
 use Neos\ContentRepository\Debug\Explore\Tool\Entry\SetNodeByUuidTool;
+use Neos\ContentRepository\Debug\Explore\Tool\Navigation\GoToParentNodeTool;
+use Neos\ContentRepository\Debug\Explore\Tool\Node\NodeDimensionsTool;
+use Neos\ContentRepository\Debug\Explore\Tool\Node\NodeIdentityTool;
+use Neos\ContentRepository\Debug\Explore\Tool\Node\NodePropertiesTool;
 use Neos\ContentRepository\Debug\Explore\Tool\Session\ExitTool;
 use Neos\ContentRepository\Debug\Explore\Tool\Session\ShowResumeCommandTool;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
@@ -86,13 +94,44 @@ class CrCommandController extends CommandController
 
         // -- Build tools --
         $tools = [
+            new NodeIdentityTool(),
+            new NodePropertiesTool(),
+            new NodeDimensionsTool(),
+            new ChooseDimensionTool(),
+            new GoToParentNodeTool(),
             new SetNodeByUuidTool(),
             new ShowResumeCommandTool($serializer),
             new ExitTool(),
         ];
 
+        // -- Derived resolvers: types computed from context values --
+        $crRegistry = $this->contentRepositoryRegistry;
+        $derivedResolvers = [
+            ContentRepository::class => static function (ToolContext $ctx) use ($crRegistry): ?ContentRepository {
+                $crId = $ctx->getByType(ContentRepositoryId::class);
+                return $crId instanceof ContentRepositoryId ? $crRegistry->get($crId) : null;
+            },
+            ContentGraphInterface::class => static function (ToolContext $ctx) use ($crRegistry): ?ContentGraphInterface {
+                $crId = $ctx->getByType(ContentRepositoryId::class);
+                $ws = $ctx->getByType(WorkspaceName::class);
+                if (!$crId instanceof ContentRepositoryId || !$ws instanceof WorkspaceName) {
+                    return null;
+                }
+                return $crRegistry->get($crId)->getContentGraph($ws);
+            },
+            ContentSubgraphInterface::class => static function (ToolContext $ctx) use ($crRegistry): ?ContentSubgraphInterface {
+                $crId = $ctx->getByType(ContentRepositoryId::class);
+                $ws = $ctx->getByType(WorkspaceName::class);
+                $dsp = $ctx->getByType(DimensionSpacePoint::class);
+                if (!$crId instanceof ContentRepositoryId || !$ws instanceof WorkspaceName || !$dsp instanceof DimensionSpacePoint) {
+                    return null;
+                }
+                return $crRegistry->get($crId)->getContentSubgraph($ws, $dsp);
+            },
+        ];
+
         // -- Wire and run session --
-        $dispatcher = new ToolDispatcher($registry, $tools);
+        $dispatcher = new ToolDispatcher($registry, $tools, $derivedResolvers);
         $session = new ExploreSession($dispatcher);
         $io = new CliToolIO($this->output);
         $session->run($ctx, $io);

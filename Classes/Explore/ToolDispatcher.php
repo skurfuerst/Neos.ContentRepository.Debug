@@ -20,12 +20,15 @@ final class ToolDispatcher
 
     /**
      * @param iterable<ToolInterface> $tools
+     * @param array<class-string, \Closure(ToolContext): ?object> $derivedResolvers Lazy resolvers for types
+     *        derived from context (e.g. ContentRepository from ContentRepositoryId). Return null = unavailable.
      * @throws \LogicException if any tool's execute() declares a parameter type that is neither
      *                         {@see ToolIOInterface} nor a type registered in {@see ToolContextRegistry}.
      */
     public function __construct(
         private readonly ToolContextRegistry $registry,
         iterable $tools,
+        private readonly array $derivedResolvers = [],
     ) {
         $validated = [];
         foreach ($tools as $tool) {
@@ -59,6 +62,11 @@ final class ToolDispatcher
             || $typeName === ToolContext::class;
     }
 
+    private function isDerived(string $typeName): bool
+    {
+        return isset($this->derivedResolvers[$typeName]);
+    }
+
     private function isAvailable(ToolInterface $tool, ToolContext $context): bool
     {
         $method = new \ReflectionMethod($tool, 'execute');
@@ -67,7 +75,16 @@ final class ToolDispatcher
             if (!$type instanceof \ReflectionNamedType) {
                 continue;
             }
-            if ($this->isFrameworkInjected($type->getName())) {
+            $typeName = $type->getName();
+            if ($this->isFrameworkInjected($typeName)) {
+                continue;
+            }
+            if ($this->isDerived($typeName)) {
+                if (!$param->isOptional() && !$type->allowsNull()) {
+                    if (($this->derivedResolvers[$typeName])($context) === null) {
+                        return false;
+                    }
+                }
                 continue;
             }
             // Context-typed param: required (non-nullable, non-optional) → tool unavailable if absent
@@ -100,6 +117,10 @@ final class ToolDispatcher
                 $args[] = $context;
                 continue;
             }
+            if ($this->isDerived($typeName)) {
+                $args[] = ($this->derivedResolvers[$typeName])($context);
+                continue;
+            }
             $args[] = $context->getByType($typeName);
         }
         return $args;
@@ -114,7 +135,7 @@ final class ToolDispatcher
                 continue;
             }
             $typeName = $type->getName();
-            if ($this->isFrameworkInjected($typeName)) {
+            if ($this->isFrameworkInjected($typeName) || $this->isDerived($typeName)) {
                 continue;
             }
             if ($this->registry->getByType($typeName) === null) {

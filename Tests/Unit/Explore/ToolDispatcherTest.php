@@ -111,6 +111,49 @@ class ToolDispatcherTest extends TestCase
 
         self::assertSame($ctx, $tool->receivedContext);
     }
+
+    // --- Derived resolvers ---
+
+    public function test_derived_type_passes_validation(): void
+    {
+        $this->expectNotToPerformAssertions();
+        new ToolDispatcher($this->registry, [new DerivedParamTool()], [
+            FakeDerivedService::class => fn(ToolContext $ctx) => new FakeDerivedService('resolved'),
+        ]);
+    }
+
+    public function test_derived_type_tool_available_when_resolver_returns_value(): void
+    {
+        $tool = new DerivedParamTool();
+        $dispatcher = new ToolDispatcher($this->registry, [$tool], [
+            FakeDerivedService::class => fn(ToolContext $ctx) => new FakeDerivedService('resolved'),
+        ]);
+
+        self::assertContains($tool, $dispatcher->availableTools(ToolContext::empty()));
+    }
+
+    public function test_derived_type_tool_unavailable_when_resolver_returns_null(): void
+    {
+        $tool = new DerivedParamTool();
+        $dispatcher = new ToolDispatcher($this->registry, [$tool], [
+            FakeDerivedService::class => fn(ToolContext $ctx) => null,
+        ]);
+
+        self::assertNotContains($tool, $dispatcher->availableTools(ToolContext::empty()));
+    }
+
+    public function test_derived_type_is_injected_into_execute(): void
+    {
+        $tool = new DerivedParamTool();
+        $dispatcher = new ToolDispatcher($this->registry, [$tool], [
+            FakeDerivedService::class => fn(ToolContext $ctx) => new FakeDerivedService('injected'),
+        ]);
+        $io = new FakeToolIO();
+
+        $dispatcher->execute($tool, ToolContext::empty(), $io);
+
+        self::assertSame('injected', $tool->receivedService?->label);
+    }
 }
 
 // --- Fake value objects ---
@@ -170,6 +213,22 @@ final class UnknownParamTool implements ToolInterface
 {
     public function getMenuLabel(ToolContext $context): string { return 'Unknown param'; }
     public function execute(ToolIOInterface $io, \DateTimeImmutable $unknown): ?ToolContext { return null; }
+}
+
+final class DerivedParamTool implements ToolInterface
+{
+    public ?FakeDerivedService $receivedService = null;
+    public function getMenuLabel(ToolContext $context): string { return 'Derived param'; }
+    public function execute(ToolIOInterface $io, FakeDerivedService $service): ?ToolContext
+    {
+        $this->receivedService = $service;
+        return null;
+    }
+}
+
+final class FakeDerivedService
+{
+    public function __construct(public readonly string $label) {}
 }
 
 final class FakeToolIO implements ToolIOInterface
