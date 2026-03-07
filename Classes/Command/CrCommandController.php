@@ -14,8 +14,10 @@ use Neos\ContentRepository\Debug\ContentRepositoryDebugger;
 use Neos\ContentRepository\Debug\Explore\ExploreSession;
 use Neos\ContentRepository\Debug\Explore\IO\CliToolIO;
 use Neos\ContentRepository\Debug\Explore\Tool\Entry\ChooseDimensionTool;
+use Neos\ContentRepository\Debug\Explore\Tool\Entry\ChooseWorkspaceTool;
 use Neos\ContentRepository\Debug\Explore\Tool\Entry\SetNodeByUuidTool;
 use Neos\ContentRepository\Debug\Explore\Tool\Navigation\GoToParentNodeTool;
+use Neos\ContentRepository\Debug\Explore\Tool\Node\DiscoverNodeTool;
 use Neos\ContentRepository\Debug\Explore\Tool\Node\NodeDimensionsTool;
 use Neos\ContentRepository\Debug\Explore\Tool\Node\NodeIdentityTool;
 use Neos\ContentRepository\Debug\Explore\Tool\Node\NodePropertiesTool;
@@ -94,9 +96,11 @@ class CrCommandController extends CommandController
 
         // -- Build tools --
         $tools = [
+            new DiscoverNodeTool(),
             new NodeIdentityTool(),
             new NodePropertiesTool(),
             new NodeDimensionsTool(),
+            new ChooseWorkspaceTool(),
             new ChooseDimensionTool(),
             new GoToParentNodeTool(),
             new SetNodeByUuidTool(),
@@ -132,7 +136,15 @@ class CrCommandController extends CommandController
 
         // -- Wire and run session --
         $dispatcher = new ToolDispatcher($registry, $tools, $derivedResolvers);
-        $session = new ExploreSession($dispatcher);
+        $contextRenderer = static function (ToolContext $ctx, \Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface $io) use ($serializer): void {
+            $parts = [];
+            foreach ($serializer->serialize($ctx) as $name => $value) {
+                $parts[] = "$name=$value";
+            }
+            $io->writeLine('');
+            $io->writeLine('=== ' . ($parts !== [] ? implode(' | ', $parts) : '(empty context)') . ' ===');
+        };
+        $session = new ExploreSession($dispatcher, $contextRenderer);
         $io = new CliToolIO($this->output);
         $session->run($ctx, $io);
     }

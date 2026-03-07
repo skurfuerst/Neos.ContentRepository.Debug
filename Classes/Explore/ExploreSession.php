@@ -30,11 +30,22 @@ final class ExploreSession
         return self::$exitSentinel ??= ToolContext::empty();
     }
 
-    public function __construct(private readonly ToolDispatcher $dispatcher) {}
+    /**
+     * @param ?\Closure(ToolContext, ToolIOInterface): void $contextRenderer Called before each menu to display
+     *        the current session state. Kept optional so tests and minimal setups can omit it.
+     */
+    public function __construct(
+        private readonly ToolDispatcher $dispatcher,
+        private readonly ?\Closure $contextRenderer = null,
+    ) {}
 
     public function run(ToolContext $context, ToolIOInterface $io): void
     {
         while (true) {
+            if ($this->contextRenderer !== null) {
+                ($this->contextRenderer)($context, $io);
+            }
+
             $available = $this->dispatcher->availableTools($context);
 
             $choices = [];

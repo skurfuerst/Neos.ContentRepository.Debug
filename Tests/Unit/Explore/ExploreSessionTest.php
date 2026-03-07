@@ -67,6 +67,21 @@ class ExploreSessionTest extends TestCase
 
         self::assertContains('Exit', $io->renderedChoiceLabels);
     }
+
+    public function test_session_calls_context_renderer_before_each_menu(): void
+    {
+        $exitTool = new FakeExitTool();
+        $dispatcher = new ToolDispatcher($this->registry, [$exitTool]);
+        $io = new ScriptedToolIO(['0']);
+
+        $renderCount = 0;
+        $session = new ExploreSession($dispatcher, function (ToolContext $ctx, ToolIOInterface $io) use (&$renderCount): void {
+            $renderCount++;
+        });
+        $session->run(ToolContext::empty(), $io);
+
+        self::assertSame(1, $renderCount);
+    }
 }
 
 // --- Fakes ---
