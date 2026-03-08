@@ -60,6 +60,7 @@ final class DocumentTreeTool implements ToolInterface
 
         $uriPathFinder = $this->resolveUriPathFinder($cr);
 
+        // $navigableNodes: uuid => tree-line-label (uuid as key, tree structure as label)
         $navigableNodes = [];
         $lines = $this->renderSubtree($subtree, $uriPathFinder, $dsp, '', true, $navigableNodes);
 
@@ -72,10 +73,7 @@ final class DocumentTreeTool implements ToolInterface
             return null;
         }
 
-        $choices = ['_stay' => '(stay here)'];
-        foreach ($navigableNodes as $id => $label) {
-            $choices[$id] = $label;
-        }
+        $choices = ['_stay' => '(stay here)'] + $navigableNodes;
 
         $selected = $io->choose('Navigate to node', $choices);
         if ($selected === '_stay') {
@@ -117,8 +115,8 @@ final class DocumentTreeTool implements ToolInterface
     }
 
     /**
-     * @param array<string, string> $navigableNodes Collected node IDs → labels for navigation
-     * @return list<string> Rendered lines
+     * @param array<string, string> $navigableNodes uuid → tree-line label (for use as choice key → label)
+     * @return list<string> Lines to display (UUID not embedded — UUID is the choice key)
      */
     private function renderSubtree(
         Subtree $subtree,
@@ -141,20 +139,19 @@ final class DocumentTreeTool implements ToolInterface
             $parts[] = $uriPath;
         }
         $parts[] = "({$name})";
-        $parts[] = "<comment>{$id}</comment>";
         $parts[] = $type;
 
-        $lines = [$prefix . $connector . implode(' ', $parts)];
+        $label = $prefix . $connector . implode(' ', $parts);
+        $lines = [$label];
 
-        // Track all nodes for navigation (including root)
-        $navigableNodes[$id] = sprintf('%s %s %s', $uriPath ?? '(no path)', $name, $type);
+        // UUID is the key; tree line (without UUID) is the label shown in choose()
+        $navigableNodes[$id] = strip_tags($label);
 
         $children = iterator_to_array($subtree->children);
         $childPrefix = $subtree->level === 0 ? '' : $prefix . ($isLast ? '   ' : '│  ');
         $count = count($children);
         foreach ($children as $i => $child) {
-            $childLines = $this->renderSubtree($child, $uriPathFinder, $dsp, $childPrefix, $i === $count - 1, $navigableNodes);
-            array_push($lines, ...$childLines);
+            array_push($lines, ...$this->renderSubtree($child, $uriPathFinder, $dsp, $childPrefix, $i === $count - 1, $navigableNodes));
         }
 
         return $lines;

@@ -33,20 +33,24 @@ final class GoToParentNodeTool implements ToolInterface
             return null;
         }
 
-        // Display breadcrumb: closest parent first, root last
+        // findAncestorNodes returns closest-first; reverse to show root→…→parent (natural tree order)
+        $ancestorList = array_reverse($ancestorList);
+
         $io->writeLine('');
         $rows = [];
         $choices = ['_stay' => '(stay here)'];
+        $depth = count($ancestorList);
         foreach ($ancestorList as $i => $ancestor) {
             $id = $ancestor->aggregateId->value;
             $name = $ancestor->name?->value ?? '-';
             $type = $ancestor->nodeTypeName->value;
-            $depth = $i + 1;
-            $rows[] = [$depth, $name, $type, $id];
-            $choices[$id] = sprintf('%s%s (%s)', str_repeat('  ', $i), $name, $type);
+            $indent = str_repeat('  ', $i);
+            $rows[] = [$indent . $name, $type, $id];
+            $choices[$id] = sprintf('%s%s (%s)', $indent, $name, $type);
+            $depth--;
         }
 
-        $io->writeTable(['Depth', 'Name', 'Type', 'ID'], $rows);
+        $io->writeTable(['Name', 'Type', 'ID'], $rows);
 
         $selected = $io->choose('Navigate to ancestor', $choices);
         if ($selected === '_stay') {

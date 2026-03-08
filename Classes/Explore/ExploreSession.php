@@ -42,9 +42,9 @@ final class ExploreSession
 
     public function run(ToolContext $context, ToolIOInterface $io): void
     {
-        // Tool set at last context change — ★ markers stay until context changes again
         /** @var array<class-string, true>|null $baselineToolSet null on first iteration (don't mark anything as new) */
         $baselineToolSet = null;
+        $contextJustChanged = false;
 
         while (true) {
             if ($this->contextRenderer !== null) {
@@ -53,10 +53,10 @@ final class ExploreSession
 
             $available = $this->dispatcher->availableTools($context);
 
-            // Auto-run tools that became newly available (e.g. NodeIdentityTool on node change)
-            if ($baselineToolSet !== null) {
+            // Auto-run tools on every context change (e.g. NodeIdentityTool re-runs when navigating nodes)
+            if ($contextJustChanged) {
                 foreach ($available as $tool) {
-                    if ($tool instanceof AutoRunToolInterface && !isset($baselineToolSet[$tool::class])) {
+                    if ($tool instanceof AutoRunToolInterface) {
                         $io->writeLine('');
                         $io->writeLine('<info>--- ' . $tool->getMenuLabel($context) . ' ---</info>');
                         $this->dispatcher->execute($tool, $context, $io);
@@ -87,16 +87,18 @@ final class ExploreSession
 
             if ($result !== null) {
                 $context = $result;
-                // Context changed — snapshot current tool set as new baseline for ★ markers
+                $contextJustChanged = true;
                 $baselineToolSet = [];
                 foreach ($available as $t) {
                     $baselineToolSet[$t::class] = true;
                 }
-            } elseif ($baselineToolSet === null) {
-                // First iteration complete — snapshot so we can detect changes on next round
-                $baselineToolSet = [];
-                foreach ($available as $t) {
-                    $baselineToolSet[$t::class] = true;
+            } else {
+                $contextJustChanged = false;
+                if ($baselineToolSet === null) {
+                    $baselineToolSet = [];
+                    foreach ($available as $t) {
+                        $baselineToolSet[$t::class] = true;
+                    }
                 }
             }
         }
