@@ -4,5 +4,9 @@
       "Read(//Users/sebastian/src/website-relaunch-2024/app/**)",
       "Bash(mise run:*)"
     ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
   }
 }

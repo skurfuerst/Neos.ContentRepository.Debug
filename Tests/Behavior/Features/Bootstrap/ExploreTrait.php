@@ -88,6 +88,19 @@ trait ExploreTrait
     }
 
     /**
+     * For tools that present two sequential choose() prompts (e.g. choose type, then choose node).
+     *
+     * @When I execute the explore tool :toolName and choose :choice1 then :choice2
+     */
+    public function iExecuteTheExploreToolAndChooseThen(string $toolName, string $choice1, string $choice2): void
+    {
+        $io = new BufferingToolIO();
+        $io->queueChoice($choice1);
+        $io->queueChoice($choice2);
+        $this->runTool($toolName, $io);
+    }
+
+    /**
      * @Then the tool output should contain :text
      */
     public function theToolOutputShouldContain(string $text): void

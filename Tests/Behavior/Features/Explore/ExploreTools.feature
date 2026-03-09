@@ -75,6 +75,21 @@ Feature: Interactive explore tools
     When I execute the explore tool "ChooseDimensionTool" and choose '{"language":"mul"}'
     Then the explore context should have "dsp" '{"language":"mul"}'
 
+  Scenario: NodeTypeExplorerTool lists node types and navigates to a chosen aggregate
+    Given the explore context is:
+      | cr        | default |
+      | workspace | live    |
+    When I execute the explore tool "NodeTypeExplorerTool" and choose "Neos.ContentRepository.Testing:Document" then "page-1"
+    Then the explore context should have "node" "page-1"
+    And the tool output should contain "page-1"
+
+  Scenario: NodeTypeExplorerTool does not change context when the user stays
+    Given the explore context is:
+      | cr        | default |
+      | workspace | live    |
+    When I execute the explore tool "NodeTypeExplorerTool" and choose "Neos.ContentRepository.Testing:Document" then "_stay"
+    Then the tool output should contain "page-1"
+
   # ---------------------------------------------------------------------------
   # Inspection tools — node identity and structure
   # ---------------------------------------------------------------------------
@@ -152,6 +167,29 @@ Feature: Interactive explore tools
     Then the tool output should contain "3 nodes on this page"
 
   # ---------------------------------------------------------------------------
+  # Inspection tools — content tree
+  # ---------------------------------------------------------------------------
+
+  Scenario: ContentTreeTool shows the content subtree and navigates on choice
+    Given the explore context is:
+      | cr        | default            |
+      | workspace | live               |
+      | node      | page-1             |
+      | dsp       | {"language":"mul"} |
+    When I execute the explore tool "ContentTreeTool" and choose "page-1-1"
+    Then the explore context should have "node" "page-1-1"
+    And the tool output should contain "page-1-1"
+
+  Scenario: ContentTreeTool does not change context when the user stays
+    Given the explore context is:
+      | cr        | default            |
+      | workspace | live               |
+      | node      | page-1             |
+      | dsp       | {"language":"mul"} |
+    When I execute the explore tool "ContentTreeTool" and choose "_stay"
+    Then the explore context should have "node" "page-1"
+
+  # ---------------------------------------------------------------------------
   # Navigation tools
   # ---------------------------------------------------------------------------
 
@@ -191,3 +229,32 @@ Feature: Interactive explore tools
       | dsp       | {"language":"mul"} |
     When I execute the explore tool "GoToParentNodeTool"
     Then the tool should have written an error containing "no ancestors"
+
+  # ---------------------------------------------------------------------------
+  # Neos-projection-dependent tools — graceful degradation
+  # ---------------------------------------------------------------------------
+
+  Scenario: NodeRoutingTool reports an error when the node has no routing entry
+    Given the explore context is:
+      | cr        | default            |
+      | workspace | live               |
+      | node      | page-1             |
+      | dsp       | {"language":"mul"} |
+    When I execute the explore tool "NodeRoutingTool"
+    Then the tool should have written an error containing "No routing information found"
+
+  Scenario: FindNodeByPathTool reports an error when no Neos site is configured
+    Given the explore context is:
+      | cr        | default            |
+      | workspace | live               |
+      | dsp       | {"language":"mul"} |
+    When I execute the explore tool "FindNodeByPathTool"
+    Then the tool should have written an error containing "No online sites found"
+
+  Scenario: DocumentTreeTool reports an error when no Neos.Neos:Sites root node exists
+    Given the explore context is:
+      | cr        | default            |
+      | workspace | live               |
+      | dsp       | {"language":"mul"} |
+    When I execute the explore tool "DocumentTreeTool"
+    Then the tool should have written an error containing "not found"
