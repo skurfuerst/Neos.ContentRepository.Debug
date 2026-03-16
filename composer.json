@@ -7,6 +7,9 @@
         "neos/contentrepository-core": "*",
         "doctrine/dbal": "*"
     },
+    "suggest": {
+        "sjs/flow-mcp": "Required for MCP server integration"
+    },
     "require-dev": {
         "neos/contentrepository-testsuite": "*"
     },

@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Read(//Users/sebastian/src/website-relaunch-2024/app/**)",
-      "Bash(mise run:*)"
+      "Bash(mise run:*)",
+      "mcp__neos__dimension_list_dimensions",
+      "mcp__neos__document_list_documents",
+      "mcp__neos__debug_explore"
     ]
   },
   "sandbox": {

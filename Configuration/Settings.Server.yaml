@@ -1,0 +1,7 @@
+SJS:
+  Flow:
+    MCP:
+      server:
+        mcp:
+          featureSets:
+            crDebugExplore: Neos\ContentRepository\Debug\Explore\MCP\DebugFeatureSet
