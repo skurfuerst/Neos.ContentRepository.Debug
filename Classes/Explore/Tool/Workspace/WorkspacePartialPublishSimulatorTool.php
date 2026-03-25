@@ -159,6 +159,17 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
             $io->writeLine('(none)');
         }
 
+        // Build a lookup map from originalSequenceNumber to RebaseableCommand so we can retrieve
+        // original event payloads for conflict drill-down without re-querying the event store.
+        /** @var array<int, RebaseableCommand> $commandByOriginalSeq */
+        $commandByOriginalSeq = [];
+        foreach ($matchingCommands as $cmd) {
+            $commandByOriginalSeq[$cmd->originalSequenceNumber->value] = $cmd;
+        }
+        foreach ($remainingCommands as $cmd) {
+            $commandByOriginalSeq[$cmd->originalSequenceNumber->value] = $cmd;
+        }
+
         // --- Step 6: Run simulation ---
         $baseWorkspace = $contentRepository->findWorkspaceByName($ws->baseWorkspaceName);
         if ($baseWorkspace === null) {
@@ -202,6 +213,34 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
                 $io->writeLine(sprintf('             %s', $conflict->getException()->getMessage()));
                 $io->writeLine('');
             }
+
+            // --- Conflict drill-down ---
+            $conflictChoices = [];
+            $conflictItems = [];
+            foreach ($conflicts as $i => $conflict) {
+                /** @var ConflictingEvent $conflict */
+                $key = (string)$i;
+                $conflictChoices[$key] = sprintf(
+                    'seq %s — %s [node: %s]',
+                    $conflict->getSequenceNumber()->value,
+                    $this->shortClassName($conflict->getEvent()::class),
+                    $conflict->getAffectedNodeAggregateId()?->value ?? '—',
+                );
+                $conflictItems[$key] = $conflict;
+            }
+            $selectedConflicts = $io->chooseMultiple('Inspect conflict details (blank = none)', $conflictChoices);
+            foreach ($selectedConflicts as $key) {
+                $conflict = $conflictItems[$key];
+                $seq = $conflict->getSequenceNumber()->value;
+                $io->writeLine(sprintf('<comment>## Conflict seq %s — %s</comment>', $seq, $this->shortClassName($conflict->getEvent()::class)));
+                $originalCmd = $commandByOriginalSeq[$seq] ?? null;
+                if ($originalCmd !== null) {
+                    $io->writeLine('<comment>Original event payload:</comment>');
+                    $this->writePayload($io, $originalCmd->originalEvent->data->value);
+                }
+                $io->writeLine('<comment>Exception:</comment>');
+                $io->writeKeyValue($this->formatException($conflict->getException()));
+            }
         }
 
         $matchingCount = iterator_count($matchingCommands->getIterator());
@@ -225,6 +264,30 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
                 ];
             }
             $io->writeTable(['In-mem seq', 'Event type', 'Node aggregate ID'], $rows);
+
+            // --- Event payload drill-down ---
+            $eventChoices = [];
+            $eventEnvelopes = [];
+            foreach ($simulator->eventStream()->withMaximumSequenceNumber($highestSeqForMatching) as $envelope) {
+                $key = (string)$envelope->sequenceNumber->value;
+                $payload = json_decode($envelope->event->data->value, true);
+                $nodeId = is_array($payload) ? ($payload['nodeAggregateId'] ?? '—') : '—';
+                $eventChoices[$key] = sprintf(
+                    '[%s] %s / node: %s',
+                    $envelope->sequenceNumber->value,
+                    $this->shortClassName($envelope->event->type->value),
+                    $nodeId,
+                );
+                $eventEnvelopes[$key] = $envelope;
+            }
+            if ($eventChoices !== []) {
+                $selectedEvents = $io->chooseMultiple('Inspect event payloads in detail (blank = none)', $eventChoices);
+                foreach ($selectedEvents as $key) {
+                    $envelope = $eventEnvelopes[$key];
+                    $io->writeLine(sprintf('<comment>## Event seq %s — %s</comment>', $key, $this->shortClassName($envelope->event->type->value)));
+                    $this->writePayload($io, $envelope->event->data->value);
+                }
+            }
         } else {
             $io->writeLine('Matching commands produced no events.');
         }
@@ -261,5 +324,57 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
             return '→ ' . $command->newNodeTypeName->value;
         }
         return '—';
+    }
+
+    private function writePayload(ToolIOInterface $io, string $json): void
+    {
+        $payload = json_decode($json, true);
+        if (!is_array($payload)) {
+            $io->writeLine('(payload could not be decoded)');
+            return;
+        }
+        $pairs = [];
+        foreach ($payload as $key => $value) {
+            $pairs[(string)$key] = is_array($value) || is_object($value)
+                ? (string)json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                : (string)$value;
+        }
+        $io->writeKeyValue($pairs);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function formatException(\Throwable $e): array
+    {
+        $frames = array_slice($e->getTrace(), 0, 10);
+        $traceLines = array_map(
+            static function (array $frame): string {
+                $location = isset($frame['file']) ? basename($frame['file']) . ':' . ($frame['line'] ?? '?') : '(internal)';
+                $call = ($frame['class'] ?? '') . ($frame['type'] ?? '') . ($frame['function'] ?? '?') . '()';
+                return $call . ' at ' . $location;
+            },
+            $frames,
+        );
+
+        $pairs = [
+            'class'     => $e::class,
+            'message'   => $e->getMessage(),
+            'file:line' => $e->getFile() . ':' . $e->getLine(),
+            'trace'     => implode("\n", $traceLines),
+        ];
+
+        $prev = $e->getPrevious();
+        if ($prev !== null) {
+            $pairs['previous.class']    = $prev::class;
+            $pairs['previous.message']  = $prev->getMessage();
+            $pairs['previous.file:line'] = $prev->getFile() . ':' . $prev->getLine();
+            $prevPrev = $prev->getPrevious();
+            if ($prevPrev !== null) {
+                $pairs['previous.previous'] = $prevPrev::class . ': ' . $prevPrev->getMessage();
+            }
+        }
+
+        return $pairs;
     }
 }
