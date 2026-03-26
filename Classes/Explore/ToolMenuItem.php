@@ -15,8 +15,9 @@ use Neos\Flow\Annotations as Flow;
 final class ToolMenuItem
 {
     /**
-     * @param list<string> $missingContextTypes Registered context-type names absent from the current context
-     *                                          that would make this tool available (direct context types only).
+     * @param list<string> $missingContextTypes  Registered context-type names absent from the current context.
+     * @param list<string> $requiredContextTypes All registered context-type names that execute() requires
+     *                                           (both present and missing), in parameter order.
      */
     public function __construct(
         public readonly string $shortName,
@@ -25,5 +26,6 @@ final class ToolMenuItem
         public readonly bool $available,
         public readonly ToolInterface $tool,
         public readonly array $missingContextTypes = [],
+        public readonly array $requiredContextTypes = [],
     ) {}
 }

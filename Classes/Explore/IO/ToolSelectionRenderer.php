@@ -9,12 +9,12 @@ use Laravel\Prompts\Themes\Default\Renderer;
 /**
  * @internal Renderer for {@see ToolSelectionPrompt}.
  *
- * Draws the full PONYHOF UI on each frame:
+ * Draws the full tool-selector UI on each frame:
  *   1. "What tool do you want to use?"
  *   2. "> {query}{dimmed-hint}"  (input line with cursor / autocomplete hint)
  *   3. Multi-column tool grid (highlighted item shown in inverse video)
- *   4. Context line (dimmed, omitted when empty)
- *   5. Help line: label of highlighted tool (left) + missing context types (right, red)
+ *   4. Context line: dimmed resume command, omitted when empty
+ *   5. Help line: label of highlighted tool (left) + required context types, color-coded (right)
  *
  * On submit the entire UI is erased and replaced with `  # "shortName – label"`.
  */
@@ -135,7 +135,7 @@ final class ToolSelectionRenderer extends Renderer
         if ($prompt->menu->contextDisplay === '') {
             return $this;
         }
-        return $this->line('  ' . $this->dim('[context = ' . $prompt->menu->contextDisplay . ']'));
+        return $this->line('  ' . $this->dim($prompt->menu->contextDisplay));
     }
 
     private function renderHelpLine(ToolSelectionPrompt $prompt): self
@@ -148,19 +148,24 @@ final class ToolSelectionRenderer extends Renderer
         $termWidth = $prompt->terminal()->cols() ?: 80;
         $left      = $item->label;
 
-        if ($item->available) {
-            $right = $this->green('✓ ready');
-        } elseif ($item->missingContextTypes !== []) {
-            $right = $this->red('needs: ' . implode(', ', $item->missingContextTypes));
+        if ($item->requiredContextTypes === []) {
+            // No context requirements — show simple ready/unavailable marker
+            $right = $item->available ? $this->green('✓ ready') : $this->red('unavailable');
         } else {
-            $right = $this->red('unavailable');
+            // Color-coded badges for each required context type: green = present, red = missing
+            $missingSet = array_flip($item->missingContextTypes);
+            $badges = [];
+            foreach ($item->requiredContextTypes as $typeName) {
+                $badges[] = isset($missingSet[$typeName])
+                    ? $this->red($typeName)
+                    : $this->green($typeName);
+            }
+            $right = implode('  ', $badges);
         }
 
-        // Strip ANSI from right to measure its visible length
         $rightVisible = mb_strlen(preg_replace("/\e\[[0-9;]*m/", '', $right) ?? $right);
-        $leftMax      = max(0, $termWidth - $rightVisible - 6); // 6 = indent (2) + gap (2) + margin (2)
+        $leftMax      = max(0, $termWidth - $rightVisible - 6);
         $left         = $this->truncateVisible($left, $leftMax);
-
         $leftVisible  = mb_strlen($left);
         $padding      = max(1, $termWidth - $leftVisible - $rightVisible - 4);
 

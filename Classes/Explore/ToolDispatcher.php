@@ -55,8 +55,10 @@ final class ToolDispatcher
      * Build a {@see ToolMenu} containing ALL tools (available + unavailable) for the current context,
      * grouped and sorted for display. Session-group tools appear last; within each group available
      * tools come before unavailable ones.
+     *
+     * @param string $contextDisplay Optional dimmed line shown inside the selector widget (e.g. resume command).
      */
-    public function buildMenu(ToolContext $context): ToolMenu
+    public function buildMenu(ToolContext $context, string $contextDisplay = ''): ToolMenu
     {
         // Collect items per group, Session group deferred to end
         /** @var array<string, list<ToolMenuItem>> $byGroup */
@@ -68,6 +70,7 @@ final class ToolDispatcher
             $meta = $this->resolveToolMeta($tool);
             $available = $this->isAvailable($tool, $context);
             $missing = $available ? [] : $this->missingContextTypes($tool, $context);
+            $required = $this->requiredContextTypes($tool);
 
             $item = new ToolMenuItem(
                 shortName: $meta->shortName,
@@ -76,6 +79,7 @@ final class ToolDispatcher
                 available: $available,
                 tool: $tool,
                 missingContextTypes: $missing,
+                requiredContextTypes: $required,
             );
 
             if ($meta->group === 'Session') {
@@ -101,7 +105,7 @@ final class ToolDispatcher
             $items[] = $item;
         }
 
-        return new ToolMenu($items);
+        return new ToolMenu($items, $contextDisplay);
     }
 
     /**
@@ -159,6 +163,33 @@ final class ToolDispatcher
             }
         }
         return $missing;
+    }
+
+    /**
+     * Collect all registered context-type names required by the tool's execute() — regardless of
+     * whether they are currently present in $context. Used for color-coded help-line badges.
+     *
+     * @return list<string>
+     */
+    private function requiredContextTypes(ToolInterface $tool): array
+    {
+        $required = [];
+        $method = new \ReflectionMethod($tool, 'execute');
+        foreach ($method->getParameters() as $param) {
+            $type = $param->getType();
+            if (!$type instanceof \ReflectionNamedType) {
+                continue;
+            }
+            $typeName = $type->getName();
+            if ($this->isFrameworkInjected($typeName) || $this->isDerived($typeName)) {
+                continue;
+            }
+            if (!$param->isOptional() && !$type->allowsNull()) {
+                $descriptor = $this->registry->getByType($typeName);
+                $required[] = $descriptor?->name ?? $typeName;
+            }
+        }
+        return $required;
     }
 
     public function execute(ToolInterface $tool, ToolContext $context, ToolIOInterface $io): ?ToolContext

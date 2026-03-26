@@ -69,7 +69,21 @@ class CrCommandController extends CommandController
             $io->writeLine('<comment>=== ' . ($parts !== [] ? implode(' | ', $parts) : '(empty context)') . ' ===</comment>');
         };
 
-        $session = new ExploreSession($dispatcher, $contextRenderer);
+        $resumeCommandBuilder = static function (ToolContext $ctx) use ($serializer): string {
+            $parts = ['./flow cr:explore'];
+            foreach ($serializer->serialize($ctx) as $name => $value) {
+                if (str_contains($value, '"')) {
+                    $parts[] = "'--{$name}={$value}'";
+                } elseif (str_contains($value, '"')) {
+                    $parts[] = "\"--{$name}={$value}\"";
+                } else {
+                    $parts[] = "--{$name}={$value}";
+                }
+            }
+            return implode(' ', $parts);
+        };
+
+        $session = new ExploreSession($dispatcher, $contextRenderer, $resumeCommandBuilder);
         $session->run($ctx, new CliToolIO($this->output, $this->menuColumns));
     }
 

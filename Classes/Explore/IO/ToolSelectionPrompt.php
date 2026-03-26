@@ -330,6 +330,14 @@ final class ToolSelectionPrompt extends Prompt
         if ($visible === []) {
             return;
         }
+        // Exact match always wins — even over a currently-highlighted prefix match
+        $lower = strtolower($this->query);
+        foreach ($visible as $item) {
+            if (strtolower($item->shortName) === $lower) {
+                $this->highlighted = $item->shortName;
+                return;
+            }
+        }
         // Keep current highlight if still visible; otherwise jump to first visible item
         foreach ($visible as $item) {
             if ($item->shortName === $this->highlighted) {

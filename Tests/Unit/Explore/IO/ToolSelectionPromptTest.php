@@ -115,6 +115,34 @@ class ToolSelectionPromptTest extends TestCase
         self::assertSame([], $prompt->sortedColumns);
     }
 
+    // ── exact-match highlight ─────────────────────────────────────────────────
+
+    public function test_exact_match_wins_when_previously_highlighted_is_prefix_match(): void
+    {
+        $prompt = new ToolSelectionPrompt($this->makeMenu([
+            ['n',   'Node Info'],
+            ['nId', 'Node Identity'],
+        ]));
+        // Simulate that a prefix match was previously highlighted (e.g. via arrow key)
+        $prompt->highlighted = 'nId';
+
+        $prompt->handleTypedChar('n');
+
+        self::assertSame('n', $prompt->highlighted, 'Exact match "n" must win over prefix match "nId"');
+    }
+
+    public function test_exact_match_wins_on_fresh_type(): void
+    {
+        $prompt = new ToolSelectionPrompt($this->makeMenu([
+            ['n',   'Node Info'],
+            ['nId', 'Node Identity'],
+        ]));
+
+        $prompt->handleTypedChar('n');
+
+        self::assertSame('n', $prompt->highlighted, 'Exact match "n" must be selected, not the first prefix match "n" (which happens to be "n" itself — this also checks order stability)');
+    }
+
     // ── autocomplete hint ────────────────────────────────────────────────────
 
     public function test_hint_set_when_single_prefix_match(): void

@@ -33,10 +33,13 @@ final class ExploreSession
     /**
      * @param ?\Closure(ToolContext, ToolIOInterface): void $contextRenderer Called before each menu to display
      *        the current session state. Kept optional so tests and minimal setups can omit it.
+     * @param ?\Closure(ToolContext): string $resumeCommandBuilder Builds the resume command string shown
+     *        dimmed inside the tool-selector widget. Omit in tests and minimal setups.
      */
     public function __construct(
         private readonly ToolDispatcher $dispatcher,
         private readonly ?\Closure $contextRenderer = null,
+        private readonly ?\Closure $resumeCommandBuilder = null,
     ) {}
 
     public function run(ToolContext $context, ToolIOInterface $io): void
@@ -50,7 +53,10 @@ final class ExploreSession
                 ($this->contextRenderer)($context, $io);
             }
 
-            $menu = $this->dispatcher->buildMenu($context);
+            $contextDisplay = $this->resumeCommandBuilder !== null
+                ? ($this->resumeCommandBuilder)($context)
+                : '';
+            $menu = $this->dispatcher->buildMenu($context, $contextDisplay);
             $available = $menu->available();
 
             // Auto-run tools on every context change (e.g. NodeIdentityTool re-runs when navigating nodes)
@@ -75,13 +81,14 @@ final class ExploreSession
                                 available: $item->available,
                                 tool: $item->tool,
                                 missingContextTypes: $item->missingContextTypes,
+                                requiredContextTypes: $item->requiredContextTypes,
                             );
                         }
                         return $item;
                     },
                     $menu->items,
                 );
-                $menu = new ToolMenu($starredItems);
+                $menu = new ToolMenu($starredItems, $menu->contextDisplay);
             }
 
             $shortName = $io->chooseFromMenu($menu);
