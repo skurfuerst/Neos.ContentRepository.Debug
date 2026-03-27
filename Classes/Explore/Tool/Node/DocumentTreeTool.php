@@ -38,13 +38,14 @@ final class DocumentTreeTool implements ToolInterface
     }
 
     public function execute(
-        ToolIOInterface $io,
-        ToolContext $context,
+        ToolIOInterface          $io,
+        ToolContext              $context,
         ContentSubgraphInterface $subgraph,
-        ContentRepository $cr,
-        DimensionSpacePoint $dsp,
-        ?NodeAggregateId $node = null,
-    ): ?ToolContext {
+        ContentRepository        $cr,
+        DimensionSpacePoint      $dsp,
+        ?NodeAggregateId         $node = null,
+    ): ?ToolContext
+    {
         $entryNodeId = $node ?? $this->findSiteNodeId($subgraph, $io);
         if ($entryNodeId === null) {
             return null;
@@ -64,12 +65,7 @@ final class DocumentTreeTool implements ToolInterface
 
         // $navigableNodes: uuid => tree-line-label (uuid as key, tree structure as label)
         $navigableNodes = [];
-        $lines = $this->renderSubtree($subtree, $uriPathFinder, $dsp, '', true, $navigableNodes);
-
-        $io->writeLine('');
-        foreach ($lines as $line) {
-            $io->writeLine($line);
-        }
+        $this->renderSubtree($subtree, $uriPathFinder, $dsp, '', true, $navigableNodes);
 
         if ($navigableNodes === []) {
             return null;
@@ -121,13 +117,14 @@ final class DocumentTreeTool implements ToolInterface
      * @return list<string> Lines to display (UUID not embedded — UUID is the choice key)
      */
     private function renderSubtree(
-        Subtree $subtree,
+        Subtree                $subtree,
         ?DocumentUriPathFinder $uriPathFinder,
-        DimensionSpacePoint $dsp,
-        string $prefix,
-        bool $isLast,
-        array &$navigableNodes,
-    ): array {
+        DimensionSpacePoint    $dsp,
+        string                 $prefix,
+        bool                   $isLast,
+        array                  &$navigableNodes,
+    ): void
+    {
         $node = $subtree->node;
         $id = $node->aggregateId->value;
         $name = $node->name?->value ?? '-';
@@ -144,7 +141,6 @@ final class DocumentTreeTool implements ToolInterface
         $parts[] = $type;
 
         $label = $prefix . $connector . implode(' ', $parts);
-        $lines = [$label];
 
         // UUID is the key; tree line (without UUID) is the label shown in choose()
         $navigableNodes[$id] = strip_tags($label);
@@ -153,10 +149,8 @@ final class DocumentTreeTool implements ToolInterface
         $childPrefix = $subtree->level === 0 ? '' : $prefix . ($isLast ? '   ' : '│  ');
         $count = count($children);
         foreach ($children as $i => $child) {
-            array_push($lines, ...$this->renderSubtree($child, $uriPathFinder, $dsp, $childPrefix, $i === $count - 1, $navigableNodes));
+            $this->renderSubtree($child, $uriPathFinder, $dsp, $childPrefix, $i === $count - 1, $navigableNodes);
         }
-
-        return $lines;
     }
 
     private function resolveUriPathFinder(ContentRepository $cr): ?DocumentUriPathFinder
@@ -170,9 +164,10 @@ final class DocumentTreeTool implements ToolInterface
 
     private function resolveUriPath(
         ?DocumentUriPathFinder $finder,
-        NodeAggregateId $nodeId,
-        DimensionSpacePoint $dsp,
-    ): ?string {
+        NodeAggregateId        $nodeId,
+        DimensionSpacePoint    $dsp,
+    ): ?string
+    {
         if ($finder === null) {
             return null;
         }

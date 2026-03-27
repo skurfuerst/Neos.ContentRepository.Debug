@@ -91,32 +91,6 @@ final class NodeInfoTool implements AutoRunToolInterface
                 $io->writeTable(['Origin DSP', 'Covered DSPs'], $dimRows);
             }
         }
-
-        // ── Workspace coverage ────────────────────────────────────────────────
-
-        $wsRows = [];
-        foreach ($cr->findWorkspaces() as $workspace) {
-            $wGraph = $cr->getContentGraph($workspace->workspaceName);
-            $wsAggregate = $wGraph->findNodeAggregateById($node);
-            if ($wsAggregate === null) {
-                continue;
-            }
-            $coveredDsps = array_map(
-                static fn($dsp) => $dsp->toJson(),
-                iterator_to_array($wsAggregate->coveredDimensionSpacePoints),
-            );
-            $wsRows[] = [
-                $workspace->workspaceName->value,
-                $wsAggregate->nodeTypeName->value,
-                implode(', ', $coveredDsps),
-            ];
-        }
-
-        if ($wsRows !== []) {
-            $io->writeLine('');
-            $io->writeTable(['Workspace', 'Node Type', 'Covered DSPs'], $wsRows);
-        }
-
         return null;
     }
 }

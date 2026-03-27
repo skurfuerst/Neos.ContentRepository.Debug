@@ -92,6 +92,7 @@ final class ExploreSessionFactory
             alias: 'n',
             fromString: NodeAggregateId::fromString(...),
             toString: fn(NodeAggregateId $v) => (string)$v,
+            // TODO: WELCHES TOOL FALLS KONTEXT NICHT GIBT???
         );
         $this->registry->register(
             name: 'workspace',
