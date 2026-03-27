@@ -68,29 +68,6 @@ final class ExploreSession
                 }
             }
 
-            // Mark newly-available tools with ★ in their labels by rebuilding the menu with starred labels.
-            // We rebuild via a fresh menu with modified labels so CliToolIO sees them at render time.
-            if ($baselineToolSet !== null) {
-                $starredItems = array_map(
-                    function (ToolMenuItem $item) use ($baselineToolSet): ToolMenuItem {
-                        if ($item->available && !isset($baselineToolSet[$item->tool::class])) {
-                            return new ToolMenuItem(
-                                shortName: $item->shortName,
-                                label: '★ ' . $item->label,
-                                group: $item->group,
-                                available: $item->available,
-                                tool: $item->tool,
-                                missingContextTypes: $item->missingContextTypes,
-                                requiredContextTypes: $item->requiredContextTypes,
-                            );
-                        }
-                        return $item;
-                    },
-                    $menu->items,
-                );
-                $menu = new ToolMenu($starredItems, $menu->contextDisplay);
-            }
-
             $shortName = $io->chooseFromMenu($menu);
             $item = $menu->findByShortName($shortName);
             // findByShortName is guaranteed non-null here: chooseFromMenu only returns valid, available short names
