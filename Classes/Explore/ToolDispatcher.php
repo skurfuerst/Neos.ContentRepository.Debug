@@ -23,6 +23,9 @@ final class ToolDispatcher
      * @param iterable<ToolInterface> $tools
      * @param array<class-string, \Closure(ToolContext): ?object> $derivedResolvers Lazy resolvers for types
      *        derived from context (e.g. ContentRepository from ContentRepositoryId). Return null = unavailable.
+     * @param array<class-string, list<class-string>> $derivedDependencies Maps each derived type to the
+     *        registered context types it depends on — used by {@see missingContextTypes()} to report
+     *        which underlying context values are missing when the resolver returns null.
      * @throws \LogicException if any tool's execute() declares a parameter type that is neither
      *                         {@see ToolIOInterface} nor a type registered in {@see ToolContextRegistry}.
      */
@@ -30,6 +33,7 @@ final class ToolDispatcher
         private readonly ToolContextRegistry $registry,
         iterable $tools,
         private readonly array $derivedResolvers = [],
+        private readonly array $derivedDependencies = [],
     ) {
         $validated = [];
         foreach ($tools as $tool) {
@@ -140,7 +144,8 @@ final class ToolDispatcher
 
     /**
      * Collect registered context-type names that are required by the tool's execute() but absent
-     * from $context. Only covers direct context types (not derived resolvers).
+     * from $context. For derived types whose resolver returns null, reports the underlying
+     * context-type dependencies that are missing (via {@see $derivedDependencies}).
      *
      * @return list<string>
      */
@@ -154,7 +159,20 @@ final class ToolDispatcher
                 continue;
             }
             $typeName = $type->getName();
-            if ($this->isFrameworkInjected($typeName) || $this->isDerived($typeName)) {
+            if ($this->isFrameworkInjected($typeName)) {
+                continue;
+            }
+            if ($this->isDerived($typeName)) {
+                if (!$param->isOptional() && !$type->allowsNull()) {
+                    if (($this->derivedResolvers[$typeName])($context) === null) {
+                        foreach ($this->derivedDependencies[$typeName] ?? [] as $depType) {
+                            if (!$context->hasByType($depType)) {
+                                $descriptor = $this->registry->getByType($depType);
+                                $missing[] = $descriptor?->name ?? $depType;
+                            }
+                        }
+                    }
+                }
                 continue;
             }
             if (!$param->isOptional() && !$type->allowsNull() && !$context->hasByType($typeName)) {

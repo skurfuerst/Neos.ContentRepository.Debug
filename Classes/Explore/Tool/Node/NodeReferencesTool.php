@@ -40,7 +40,7 @@ final class NodeReferencesTool implements ToolInterface
 
         // -- Outgoing references --
         $io->writeLine('');
-        $io->writeLine('<comment>Outgoing references (' . count($outgoing) . ')</comment>');
+        $io->writeNote('Outgoing references (' . count($outgoing) . ')');
         if (count($outgoing) === 0) {
             $io->writeLine('  (none)');
         } else {
@@ -60,7 +60,7 @@ final class NodeReferencesTool implements ToolInterface
 
         // -- Incoming references (back-references) --
         $io->writeLine('');
-        $io->writeLine('<comment>Incoming references (' . count($incoming) . ')</comment>');
+        $io->writeNote('Incoming references (' . count($incoming) . ')');
         if (count($incoming) === 0) {
             $io->writeLine('  (none)');
         } else {
@@ -92,7 +92,7 @@ final class NodeReferencesTool implements ToolInterface
             return null;
         }
 
-        $io->writeLine(sprintf('✔ Node set to: %s', $selected));
+        $io->writeInfo(sprintf('✔ Node set to: %s', $selected));
         return $context->with('node', NodeAggregateId::fromString($selected));
     }
 }

@@ -51,7 +51,7 @@ final class PageHistoryTool implements ToolInterface
         $nodeIds = [];
         $this->collectNodeIds($subtree, $nodeIds);
 
-        $io->writeLine(sprintf('<comment>Querying events for %d nodes on this page...</comment>', count($nodeIds)));
+        $io->writeNote(sprintf('Querying events for %d nodes on this page...', count($nodeIds)));
 
         $tableName = DoctrineEventStoreFactory::databaseTableName($cr);
 
@@ -59,7 +59,7 @@ final class PageHistoryTool implements ToolInterface
         $qb = $this->connection->createQueryBuilder();
         $qb->select('sequencenumber', 'type', 'payload', 'recordedat')
             ->from($tableName)
-            ->where('JSON_EXTRACT(payload, \'$.nodeAggregateId\') IN (:nodeIds)')
+            ->where('JSON_UNQUOTE(JSON_EXTRACT(payload, \'$.nodeAggregateId\')) IN (:nodeIds)')
             ->setParameter('nodeIds', $nodeIds, Connection::PARAM_STR_ARRAY)
             ->orderBy('sequencenumber', 'ASC');
 
@@ -77,7 +77,7 @@ final class PageHistoryTool implements ToolInterface
             return null;
         }
 
-        $io->writeLine(sprintf('<comment>%d events across %d nodes</comment>', count($events), count($nodeIds)));
+        $io->writeNote(sprintf('%d events across %d nodes', count($events), count($nodeIds)));
         $io->writeLine('');
 
         $rows = [];

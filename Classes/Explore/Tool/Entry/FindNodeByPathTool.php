@@ -68,7 +68,7 @@ final class FindNodeByPathTool implements ToolInterface
             'Node Type' => $docInfo->getNodeTypeName()->value,
         ]);
 
-        $io->writeLine(sprintf('✔ Node set to: %s', $docInfo->getNodeAggregateId()->value));
+        $io->writeInfo(sprintf('✔ Node set to: %s', $docInfo->getNodeAggregateId()->value));
         return $context->with('node', $docInfo->getNodeAggregateId());
     }
 

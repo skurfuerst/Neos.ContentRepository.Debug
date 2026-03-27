@@ -62,6 +62,16 @@ final class McpToolIO implements ToolIOInterface
         $this->errors[] = $message;
     }
 
+    public function writeInfo(string $message): void
+    {
+        $this->lines[] = $message;
+    }
+
+    public function writeNote(string $message): void
+    {
+        $this->lines[] = $message;
+    }
+
     public function ask(string $question, ?callable $autocomplete = null): string
     {
         $ordinal = $this->nextOrdinal++;

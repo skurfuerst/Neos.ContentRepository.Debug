@@ -66,7 +66,7 @@ class CrCommandController extends CommandController
                 $parts[] = "$name=$value";
             }
             $io->writeLine('');
-            $io->writeLine('<comment>=== ' . ($parts !== [] ? implode(' | ', $parts) : '(empty context)') . ' ===</comment>');
+            $io->writeNote('=== ' . ($parts !== [] ? implode(' | ', $parts) : '(empty context)') . ' ===');
         };
 
         $resumeCommandBuilder = static function (ToolContext $ctx) use ($serializer): string {
@@ -84,7 +84,7 @@ class CrCommandController extends CommandController
         };
 
         $session = new ExploreSession($dispatcher, $contextRenderer, $resumeCommandBuilder);
-        $session->run($ctx, new CliToolIO($this->output, $this->menuColumns));
+        $session->run($ctx, new CliToolIO($this->menuColumns));
     }
 
     public function debugCommand(string $debugScript, string $contentRepository = 'default'): void

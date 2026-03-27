@@ -53,7 +53,12 @@ final class ExploreSessionFactory
             $this->reflectionService->getAllImplementationClassNamesForInterface(ToolInterface::class),
         );
 
-        return new ToolDispatcher($this->registry, $tools, $this->buildDerivedResolvers());
+        return new ToolDispatcher(
+            $this->registry,
+            $tools,
+            $this->buildDerivedResolvers(),
+            $this->buildDerivedDependencies(),
+        );
     }
 
     /**
@@ -108,6 +113,22 @@ final class ExploreSessionFactory
             fromString: DimensionSpacePoint::fromJsonString(...),
             toString: fn(DimensionSpacePoint $v) => $v->toJson(),
         );
+    }
+
+    /**
+     * Maps each derived type to the registered context types it depends on,
+     * so {@see ToolDispatcher::missingContextTypes()} can report what's missing.
+     *
+     * @return array<class-string, list<class-string>>
+     */
+    private function buildDerivedDependencies(): array
+    {
+        return [
+            ContentRepository::class => [ContentRepositoryId::class],
+            ContentGraphInterface::class => [ContentRepositoryId::class, WorkspaceName::class],
+            ContentSubgraphInterface::class => [ContentRepositoryId::class, WorkspaceName::class, DimensionSpacePoint::class],
+            EventStoreInterface::class => [ContentRepositoryId::class],
+        ];
     }
 
     /** @return array<class-string, \Closure(ToolContext): ?object> */

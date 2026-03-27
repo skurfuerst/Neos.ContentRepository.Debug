@@ -24,6 +24,12 @@ interface ToolIOInterface
 
     public function writeError(string $message): void;
 
+    /** Display an informational heading — rendered green in CLI, semantic in MCP. */
+    public function writeInfo(string $message): void;
+
+    /** Display an emphasized note/section label — rendered yellow in CLI, semantic in MCP. */
+    public function writeNote(string $message): void;
+
     /**
      * Free-text prompt with optional live autocomplete.
      *

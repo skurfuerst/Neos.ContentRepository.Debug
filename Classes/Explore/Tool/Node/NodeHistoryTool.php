@@ -60,7 +60,7 @@ final class NodeHistoryTool implements ToolInterface
             return null;
         }
 
-        $io->writeLine(sprintf('<comment>%d events for node %s</comment>', count($events), $node->value));
+        $io->writeNote(sprintf('%d events for node %s', count($events), $node->value));
         $io->writeLine('');
 
         $summarizer = new EventPayloadSummarizer();

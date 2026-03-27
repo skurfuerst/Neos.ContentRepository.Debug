@@ -41,7 +41,7 @@ final class ChooseDimensionTool implements ToolInterface
         }
 
         $selected = $io->choose('Choose dimension space point', $choices);
-        $io->writeLine(sprintf('✔ Dimension set to: %s', $selected));
+        $io->writeInfo(sprintf('✔ Dimension set to: %s', $selected));
 
         return $context->withFromString('dsp', $selected);
     }

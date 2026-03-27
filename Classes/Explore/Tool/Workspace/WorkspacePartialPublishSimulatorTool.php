@@ -90,7 +90,7 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
         }
 
         // --- Step 3: Display all commands ---
-        $io->writeLine(sprintf('<comment>Rebaseable commands in workspace "%s"</comment>', $workspace->value));
+        $io->writeNote(sprintf('Rebaseable commands in workspace "%s"', $workspace->value));
         $io->writeTable(
             ['Seq#', 'Command', 'Node aggregate ID', 'Node type'],
             array_map(
@@ -129,7 +129,7 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
 
         // --- Step 5: Display split ---
         $io->writeLine('');
-        $io->writeLine(sprintf('<comment>Matching (%d commands — would be published)</comment>', iterator_count($matchingCommands->getIterator())));
+        $io->writeNote(sprintf('Matching (%d commands — would be published)', iterator_count($matchingCommands->getIterator())));
         $io->writeTable(
             ['Seq#', 'Command', 'Node aggregate ID', 'Node type'],
             array_map(
@@ -143,7 +143,7 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
             )
         );
 
-        $io->writeLine(sprintf('<comment>Remaining (%d commands — would stay in workspace)</comment>', iterator_count($remainingCommands->getIterator())));
+        $io->writeNote(sprintf('Remaining (%d commands — would stay in workspace)', iterator_count($remainingCommands->getIterator())));
         if (!$remainingCommands->isEmpty()) {
             $io->writeTable(
                 ['Seq#', 'Command', 'Node aggregate ID', 'Node type'],
@@ -180,7 +180,7 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
         }
 
         $io->writeLine('');
-        $io->writeLine(sprintf('<comment>Running simulation against base workspace "%s"…</comment>', $baseWorkspace->workspaceName->value));
+        $io->writeNote(sprintf('Running simulation against base workspace "%s"…', $baseWorkspace->workspaceName->value));
 
         $simulator = $commandSimulatorFactory->createSimulatorForWorkspace($baseWorkspace->workspaceName);
 
@@ -201,7 +201,7 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
         // --- Step 7: Display results ---
         if ($simulator->hasConflicts()) {
             $conflicts = $simulator->getConflictingEvents();
-            $io->writeLine(sprintf('⚠ Simulation conflicts (%d):', count($conflicts)));
+            $io->writeNote(sprintf('⚠ Simulation conflicts (%d):', count($conflicts)));
             $io->writeLine('');
             foreach ($conflicts as $conflict) {
                 /** @var ConflictingEvent $conflict */
@@ -234,13 +234,13 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
             foreach ($selectedConflicts as $key) {
                 $conflict = $conflictItems[$key];
                 $seq = $conflict->getSequenceNumber()->value;
-                $io->writeLine(sprintf('<comment>## Conflict seq %s — %s</comment>', $seq, $this->shortClassName($conflict->getEvent()::class)));
+                $io->writeNote(sprintf('## Conflict seq %s — %s', $seq, $this->shortClassName($conflict->getEvent()::class)));
                 $originalCmd = $commandByOriginalSeq[$seq] ?? null;
                 if ($originalCmd !== null) {
-                    $io->writeLine('<comment>Original event payload:</comment>');
+                    $io->writeNote('Original event payload:');
                     $this->writePayload($io, $originalCmd->originalEvent->data->value);
                 }
-                $io->writeLine('<comment>Exception:</comment>');
+                $io->writeNote('Exception:');
                 $io->writeKeyValue($this->formatException($conflict->getException()));
             }
         }
@@ -250,9 +250,9 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
         if (!$highestSeqForMatching->equals(SequenceNumber::none())) {
             $io->writeLine('');
             if ($simulator->hasConflicts()) {
-                $io->writeLine('<comment>Events that were simulated until the conflict happened:</comment>');
+                $io->writeNote('Events that were simulated until the conflict happened:');
             } else {
-                $io->writeLine('<comment>Events that would be published to base workspace:</comment>');
+                $io->writeNote('Events that would be published to base workspace:');
             }
 
             $rows = [];
@@ -286,7 +286,7 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
                 $selectedEvents = $io->chooseMultiple('Inspect event payloads in detail (blank = none)', $eventChoices);
                 foreach ($selectedEvents as $key) {
                     $envelope = $eventEnvelopes[$key];
-                    $io->writeLine(sprintf('<comment>## Event seq %s — %s</comment>', $key, $this->shortClassName($envelope->event->type->value)));
+                    $io->writeNote(sprintf('## Event seq %s — %s', $key, $this->shortClassName($envelope->event->type->value)));
                     $this->writePayload($io, $envelope->event->data->value);
                 }
             }

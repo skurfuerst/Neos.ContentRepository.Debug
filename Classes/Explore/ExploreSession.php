@@ -63,7 +63,7 @@ final class ExploreSession
             if ($contextJustChanged) {
                 foreach ($menu->availableAutoRun() as $autoTool) {
                     $io->writeLine('');
-                    $io->writeLine('<info>--- ' . $autoTool->tool->getMenuLabel($context) . ' ---</info>');
+                    $io->writeInfo('---' . $autoTool->tool->getMenuLabel($context) . ' ---');
                     $this->dispatcher->execute($autoTool->tool, $context, $io);
                 }
             }
@@ -75,7 +75,7 @@ final class ExploreSession
             $tool = $item->tool;
 
             $io->writeLine('');
-            $io->writeLine('<info>--- ' . $tool->getMenuLabel($context) . ' ---</info>');
+            $io->writeInfo('---' . $tool->getMenuLabel($context) . ' ---');
 
             $result = $this->dispatcher->execute($tool, $context, $io);
 

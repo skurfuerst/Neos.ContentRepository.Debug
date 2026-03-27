@@ -67,7 +67,7 @@ final class ContentTreeTool implements ToolInterface
             return null;
         }
 
-        $io->writeLine(sprintf('✔ Node set to: %s', $selected));
+        $io->writeInfo(sprintf('✔ Node set to: %s', $selected));
         return $context->with('node', NodeAggregateId::fromString($selected));
     }
 
@@ -89,7 +89,7 @@ final class ContentTreeTool implements ToolInterface
         $shortType = str_contains($type, ':') ? substr($type, strrpos($type, ':') + 1) : $type;
 
         $connector = $subtree->level === 0 ? '' : ($isLast ? '└─ ' : '├─ ');
-        $line = $prefix . $connector . sprintf('(%s) <comment>%s</comment> %s', $name, $id, $shortType);
+        $line = $prefix . $connector . sprintf('(%s) %s %s', $name, $id, $shortType);
 
         $lines = [$line];
         $navigableNodes[$id] = sprintf('%s %s', $name, $shortType);

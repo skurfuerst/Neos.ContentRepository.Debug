@@ -40,7 +40,7 @@ final class ChooseWorkspaceTool implements ToolInterface
         }
 
         $selected = $io->choose('Choose workspace', $choices);
-        $io->writeLine(sprintf('✔ Workspace set to: %s', $selected));
+        $io->writeInfo(sprintf('✔ Workspace set to: %s', $selected));
 
         return $context->withFromString('workspace', $selected);
     }

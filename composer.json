@@ -12,7 +12,8 @@
         "sjs/flow-mcp": "Required for MCP server integration"
     },
     "require-dev": {
-        "neos/contentrepository-testsuite": "*"
+        "neos/contentrepository-testsuite": "*",
+	"mockery/mockery": "*"
     },
     "autoload": {
         "psr-4": {

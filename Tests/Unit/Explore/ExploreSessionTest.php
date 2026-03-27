@@ -130,6 +130,8 @@ final class ScriptedToolIO implements ToolIOInterface
     public function writeKeyValue(array $pairs): void {}
     public function writeLine(string $text = ''): void {}
     public function writeError(string $message): void {}
+    public function writeInfo(string $message): void {}
+    public function writeNote(string $message): void {}
     public function ask(string $question, ?callable $autocomplete = null): string { return ''; }
 
     public function choose(string $question, array $choices): string

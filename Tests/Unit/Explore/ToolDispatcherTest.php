@@ -143,6 +143,36 @@ class ToolDispatcherTest extends TestCase
         self::assertNotContains($tool, $dispatcher->availableTools(ToolContext::empty()));
     }
 
+    public function test_unavailable_derived_type_reports_missing_underlying_context_types(): void
+    {
+        // Register additional context types that the derived resolver depends on
+        $this->registry->register(
+            name: 'workspace',
+            type: FakeWorkspaceName::class,
+            alias: 'ws',
+            fromString: fn(string $s) => new FakeWorkspaceName($s),
+            toString: fn(FakeWorkspaceName $v) => $v->value,
+        );
+
+        $tool = new DerivedParamTool();
+        $dispatcher = new ToolDispatcher($this->registry, [$tool], derivedResolvers: [
+            FakeDerivedService::class => fn(ToolContext $ctx) => null,
+        ], derivedDependencies: [
+            FakeDerivedService::class => [FakeNodeAggregateId::class, FakeWorkspaceName::class],
+        ]);
+
+        // Context has node but NOT workspace — derived resolver returns null
+        $ctx = ToolContext::empty()->with('node', new FakeNodeAggregateId('abc'));
+        $menu = $dispatcher->buildMenu($ctx);
+
+        $item = $menu->findByShortName('derived-param');
+        self::assertNotNull($item);
+        self::assertFalse($item->available);
+        // Should report 'workspace' as missing (node is present, workspace is not)
+        self::assertContains('workspace', $item->missingContextTypes);
+        self::assertNotContains('node', $item->missingContextTypes);
+    }
+
     public function test_derived_type_is_injected_into_execute(): void
     {
         $tool = new DerivedParamTool();
@@ -160,6 +190,11 @@ class ToolDispatcherTest extends TestCase
 // --- Fake value objects ---
 
 final class FakeNodeAggregateId
+{
+    public function __construct(public readonly string $value) {}
+}
+
+final class FakeWorkspaceName
 {
     public function __construct(public readonly string $value) {}
 }
@@ -238,6 +273,8 @@ final class FakeToolIO implements ToolIOInterface
     public function writeKeyValue(array $pairs): void {}
     public function writeLine(string $text = ''): void {}
     public function writeError(string $message): void {}
+    public function writeInfo(string $message): void {}
+    public function writeNote(string $message): void {}
     public function ask(string $question, ?callable $autocomplete = null): string { return ''; }
     public function choose(string $question, array $choices): string { return array_key_first($choices); }
     public function chooseMultiple(string $question, array $choices, array $default = []): array { return $default; }

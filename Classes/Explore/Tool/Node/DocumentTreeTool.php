@@ -78,7 +78,7 @@ final class DocumentTreeTool implements ToolInterface
             return null;
         }
 
-        $io->writeLine(sprintf('✔ Node set to: %s', $selected));
+        $io->writeInfo(sprintf('✔ Node set to: %s', $selected));
         return $context->with('node', NodeAggregateId::fromString($selected));
     }
 

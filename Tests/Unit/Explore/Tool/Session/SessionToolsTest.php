@@ -92,6 +92,8 @@ final class SpyToolIO implements ToolIOInterface
     public function writeKeyValue(array $pairs): void {}
     public function writeLine(string $text = ''): void { $this->lastLine = $text; }
     public function writeError(string $message): void {}
+    public function writeInfo(string $message): void {}
+    public function writeNote(string $message): void {}
     public function ask(string $question, ?callable $autocomplete = null): string { return ''; }
     public function choose(string $question, array $choices): string { return (string)array_key_first($choices); }
     public function chooseMultiple(string $question, array $choices, array $default = []): array { return $default; }
