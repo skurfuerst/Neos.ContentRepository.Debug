@@ -81,16 +81,6 @@ final class BufferingToolIO implements ToolIOInterface
         return array_shift($this->answerQueue) ?? '';
     }
 
-    public function choose(string $question, array $choices): string
-    {
-        $queued = array_shift($this->choiceQueue);
-        if ($queued !== null && isset($choices[$queued])) {
-            return $queued;
-        }
-        // Fall back to first choice if queue is empty or key doesn't exist
-        return (string)array_key_first($choices);
-    }
-
     public function chooseMultiple(string $question, array $choices, array $default = []): array
     {
         $queued = array_shift($this->multiChoiceQueue) ?? '';
@@ -98,6 +88,16 @@ final class BufferingToolIO implements ToolIOInterface
             array_map('trim', explode(',', $queued)),
             fn(string $k) => isset($choices[$k]),
         ));
+    }
+
+    public function chooseFromTable(string $question, array $headers, array $rows): string
+    {
+        $this->tables[] = ['headers' => $headers, 'rows' => array_values($rows)];
+        $queued = array_shift($this->choiceQueue);
+        if ($queued !== null && isset($rows[$queued])) {
+            return $queued;
+        }
+        return (string)array_key_first($rows);
     }
 
     public function chooseFromMenu(ToolMenu $menu): string
