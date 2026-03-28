@@ -108,11 +108,11 @@ Feature: MCP transport for explore tools
   # Interaction-required when answers are missing
   # ---------------------------------------------------------------------------
 
-  Scenario: Missing answer for choose returns interaction-required with choices
+  Scenario: Missing answer for chooseFromTable returns interaction-required with choices
     Given the explore context is:
       | cr | default |
     When I execute the explore tool "ChooseWorkspaceTool" via MCP expecting interaction
-    Then the MCP interaction type should be "choose"
+    Then the MCP interaction type should be "chooseFromTable"
     And the MCP interaction question should contain "workspace"
     And the MCP interaction choices should include "live"
 

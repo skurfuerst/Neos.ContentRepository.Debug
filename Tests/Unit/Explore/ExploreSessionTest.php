@@ -132,13 +132,8 @@ final class ScriptedToolIO implements ToolIOInterface
     public function writeError(string $message): void {}
     public function writeInfo(string $message): void {}
     public function writeNote(string $message): void {}
+    public function chooseFromTable(string $question, array $headers, array $rows): string { return (string)array_key_first($rows); }
     public function ask(string $question, ?callable $autocomplete = null): string { return ''; }
-
-    public function choose(string $question, array $choices): string
-    {
-        $this->renderedChoiceLabels = array_values($choices);
-        return (string)array_keys($choices)[(int)array_shift($this->choices)];
-    }
 
     public function chooseMultiple(string $question, array $choices, array $default = []): array { return $default; }
 

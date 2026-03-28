@@ -38,13 +38,6 @@ interface ToolIOInterface
     public function ask(string $question, ?callable $autocomplete = null): string;
 
     /**
-     * Present a numbered list of choices; returns the selected key.
-     *
-     * @param array<string, string> $choices key => label
-     */
-    public function choose(string $question, array $choices): string;
-
-    /**
      * Present a numbered list of choices; returns the selected keys.
      *
      * @param array<string, string> $choices  key => label
@@ -52,6 +45,15 @@ interface ToolIOInterface
      * @return list<string>
      */
     public function chooseMultiple(string $question, array $choices, array $default = []): array;
+
+    /**
+     * Display an interactive table with row selection — combines writeTable() + choose() into one widget.
+     * Returns the key of the selected row. In CLI this renders as a searchable, navigable table.
+     *
+     * @param array<string> $headers
+     * @param array<string, array<string>> $rows  Key => columns (key is returned on selection)
+     */
+    public function chooseFromTable(string $question, array $headers, array $rows): string;
 
     /**
      * Rich tool-selection prompt: renders a grouped display of all tools (available + unavailable)

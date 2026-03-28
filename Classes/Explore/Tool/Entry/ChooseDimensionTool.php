@@ -40,7 +40,8 @@ final class ChooseDimensionTool implements ToolInterface
             return null;
         }
 
-        $selected = $io->choose('Choose dimension space point', $choices);
+        $rows = array_map(fn(string $label) => [$label], $choices);
+        $selected = $io->chooseFromTable('Choose dimension space point', ['Dimension Space Point'], $rows);
         $io->writeInfo(sprintf('✔ Dimension set to: %s', $selected));
 
         return $context->withFromString('dsp', $selected);

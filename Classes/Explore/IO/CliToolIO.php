@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Neos\ContentRepository\Debug\Explore\IO;
 
+use Laravel\Prompts\DataTablePrompt;
 use Laravel\Prompts\MultiSelectPrompt;
 use Laravel\Prompts\Note;
 use Laravel\Prompts\Table;
@@ -62,25 +63,22 @@ final class CliToolIO implements ToolIOInterface
         return (string)(new TextPrompt(label: $question, required: false))->prompt();
     }
 
-    public function choose(string $question, array $choices): string
-    {
-        return (string)(new FilterableSelectPrompt(
-            $question,
-            fn (string $search) => $search === ''
-                ? $choices
-                : array_filter($choices, fn (string $label) =>
-                    str_contains(mb_strtolower($label), mb_strtolower($search)),
-                ),
-            count($choices),
-        ))->prompt();
-    }
-
     public function chooseMultiple(string $question, array $choices, array $default = []): array
     {
         // laravel/prompts multiselect: arrow keys + space to toggle, returns selected keys.
         $selected = (new MultiSelectPrompt(label: $question, options: $choices, default: $default, scroll: count($choices)))->prompt();
         // Re-sort by position in $choices — laravel/prompts returns keys in toggle order, not options order.
         return array_values(array_intersect(array_keys($choices), $selected));
+    }
+
+    public function chooseFromTable(string $question, array $headers, array $rows): string
+    {
+        return (string)(new DataTablePrompt(
+            headers: $headers,
+            rows: $rows,
+            label: $question,
+            scroll: count($rows),
+        ))->prompt();
     }
 
     public function chooseFromMenu(ToolMenu $menu): string

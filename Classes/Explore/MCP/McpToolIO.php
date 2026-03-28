@@ -12,7 +12,7 @@ use Neos\ContentRepository\Debug\Explore\ToolMenuItem;
  * @internal MCP transport for {@see ToolIOInterface} — buffers all output and consumes pre-supplied answers
  *           for stateless request/response MCP tool calls.
  *
- * When a tool calls {@see ask()} or {@see choose()} and no pre-supplied answer remains,
+ * When a tool calls {@see ask()} or {@see chooseFromTable()} and no pre-supplied answer remains,
  * a {@see McpInteractionRequiredException} is thrown so the MCP client can re-invoke with the answer.
  */
 final class McpToolIO implements ToolIOInterface
@@ -82,16 +82,6 @@ final class McpToolIO implements ToolIOInterface
         return $answer;
     }
 
-    public function choose(string $question, array $choices): string
-    {
-        $ordinal = $this->nextOrdinal++;
-        $answer = array_shift($this->answerQueue);
-        if ($answer === null) {
-            throw new McpInteractionRequiredException('choose', $question, $choices, $ordinal);
-        }
-        return $this->resolveChoiceAnswer($answer, $choices);
-    }
-
     public function chooseMultiple(string $question, array $choices, array $default = []): array
     {
         $ordinal = $this->nextOrdinal++;
@@ -103,6 +93,18 @@ final class McpToolIO implements ToolIOInterface
             fn(string $part) => $this->resolveChoiceAnswer(trim($part), $choices),
             explode(',', $answer),
         );
+    }
+
+    public function chooseFromTable(string $question, array $headers, array $rows): string
+    {
+        $this->tables[] = ['headers' => $headers, 'rows' => array_values($rows)];
+        $ordinal = $this->nextOrdinal++;
+        $answer = array_shift($this->answerQueue);
+        $choices = array_map(fn(array $cols) => implode(' | ', $cols), $rows);
+        if ($answer === null) {
+            throw new McpInteractionRequiredException('chooseFromTable', $question, $choices, $ordinal);
+        }
+        return $this->resolveChoiceAnswer($answer, $choices);
     }
 
     public function chooseFromMenu(ToolMenu $menu): string

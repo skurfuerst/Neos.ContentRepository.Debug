@@ -27,19 +27,19 @@ final class ChooseWorkspaceTool implements ToolInterface
     {
         $workspaces = $cr->findWorkspaces();
 
-        $choices = [];
+        $rows = [];
         foreach ($workspaces as $workspace) {
             $name = $workspace->workspaceName->value;
             $base = $workspace->baseWorkspaceName?->value;
-            $choices[$name] = $base !== null ? "$name (base: $base)" : $name;
+            $rows[$name] = [$base !== null ? "$name (base: $base)" : $name];
         }
 
-        if ($choices === []) {
+        if ($rows === []) {
             $io->writeError('No workspaces found.');
             return null;
         }
 
-        $selected = $io->choose('Choose workspace', $choices);
+        $selected = $io->chooseFromTable('Choose workspace', ['Workspace'], $rows);
         $io->writeInfo(sprintf('✔ Workspace set to: %s', $selected));
 
         return $context->withFromString('workspace', $selected);

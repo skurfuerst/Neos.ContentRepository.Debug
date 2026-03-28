@@ -86,11 +86,11 @@ final class FindNodeByPathTool implements ToolInterface
             return $siteList[0]->getNodeName();
         }
 
-        $choices = [];
+        $rows = [];
         foreach ($siteList as $site) {
-            $choices[$site->getNodeName()->value] = $site->getName() . ' (' . $site->getNodeName()->value . ')';
+            $rows[$site->getNodeName()->value] = [$site->getName() . ' (' . $site->getNodeName()->value . ')'];
         }
-        $selected = $io->choose('Multiple sites found — choose one', $choices);
+        $selected = $io->chooseFromTable('Multiple sites found — choose one', ['Site'], $rows);
         return SiteNodeName::fromString($selected);
     }
 }

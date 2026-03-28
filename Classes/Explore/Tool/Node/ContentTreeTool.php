@@ -6,23 +6,30 @@ namespace Neos\ContentRepository\Debug\Explore\Tool\Node;
 
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindSubtreeFilter;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Subtree;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
+use Neos\Flow\Annotations as Flow;
+use Neos\Neos\Domain\NodeLabel\NodeLabelGeneratorInterface;
 
 /**
- * @internal Renders the full content tree (all node types) under the current node — shows the page structure
- *           including content collections, content nodes, etc.
+ * @internal Renders the full content tree (all node types) under the current node with node labels —
+ *           shows the page structure including content collections, content nodes, etc.
  *
  * @see ContentSubgraphInterface::findSubtree() for the underlying tree lookup.
+ * @see NodeLabelGeneratorInterface for node label resolution from NodeTypes.yaml.
  */
 #[ToolMeta(shortName: 'nContentTree', group: 'Nodes')]
 final class ContentTreeTool implements ToolInterface
 {
     private const MAX_LEVELS = 5;
+
+    #[Flow\Inject]
+    protected NodeLabelGeneratorInterface $nodeLabelGenerator;
 
     public function getMenuLabel(ToolContext $context): string
     {
@@ -45,24 +52,11 @@ final class ContentTreeTool implements ToolInterface
             return null;
         }
 
-        $navigableNodes = [];
-        $lines = $this->renderSubtree($subtree, '', true, $navigableNodes);
+        /** @var array<string, array<string>> $tableRows uuid => [label, type, nodeName] */
+        $tableRows = ['_stay' => ['(stay here)', '', '']];
+        $this->renderSubtree($subtree, '', true, $tableRows);
 
-        $io->writeLine('');
-        foreach ($lines as $line) {
-            $io->writeLine($line);
-        }
-
-        if ($navigableNodes === []) {
-            return null;
-        }
-
-        $choices = ['_stay' => '(stay here)'];
-        foreach ($navigableNodes as $id => $label) {
-            $choices[$id] = $label;
-        }
-
-        $selected = $io->choose('Navigate to node', $choices);
+        $selected = $io->chooseFromTable('Navigate to node', ['Label', 'Type', 'Node Name'], $tableRows);
         if ($selected === '_stay') {
             return null;
         }
@@ -71,37 +65,37 @@ final class ContentTreeTool implements ToolInterface
         return $context->with('node', NodeAggregateId::fromString($selected));
     }
 
-    /**
-     * @param array<string, string> $navigableNodes
-     * @return list<string>
-     */
+    /** @param array<string, array<string>> $tableRows id => row columns */
     private function renderSubtree(
         Subtree $subtree,
         string $prefix,
         bool $isLast,
-        array &$navigableNodes,
-    ): array {
+        array &$tableRows,
+    ): void {
         $node = $subtree->node;
         $id = $node->aggregateId->value;
-        $name = $node->name?->value ?? '-';
-        $type = $node->nodeTypeName->value;
-        // Shorten type: "Vendor.Package:Content.Text" → "Content.Text"
-        $shortType = str_contains($type, ':') ? substr($type, strrpos($type, ':') + 1) : $type;
 
         $connector = $subtree->level === 0 ? '' : ($isLast ? '└─ ' : '├─ ');
-        $line = $prefix . $connector . sprintf('(%s) %s %s', $name, $id, $shortType);
-
-        $lines = [$line];
-        $navigableNodes[$id] = sprintf('%s %s', $name, $shortType);
+        $tableRows[$id] = [
+            $prefix . $connector . $this->nodeLabel($node),
+            $node->nodeTypeName->value,
+            $node->name?->value ?? '-',
+        ];
 
         $children = iterator_to_array($subtree->children);
         $childPrefix = $subtree->level === 0 ? '' : $prefix . ($isLast ? '   ' : '│  ');
         $count = count($children);
         foreach ($children as $i => $child) {
-            $childLines = $this->renderSubtree($child, $childPrefix, $i === $count - 1, $navigableNodes);
-            array_push($lines, ...$childLines);
+            $this->renderSubtree($child, $childPrefix, $i === $count - 1, $tableRows);
         }
+    }
 
-        return $lines;
+    private function nodeLabel(Node $node): string
+    {
+        try {
+            return $this->nodeLabelGenerator->getLabel($node);
+        } catch (\Throwable) {
+            return $node->nodeTypeName->value . ' (' . ($node->name?->value ?? '-') . ')';
+        }
     }
 }

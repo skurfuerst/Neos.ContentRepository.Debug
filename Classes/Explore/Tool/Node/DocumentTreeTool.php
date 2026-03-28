@@ -10,27 +10,34 @@ use Neos\ContentRepository\Core\NodeType\NodeTypeName;
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindChildNodesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindSubtreeFilter;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Subtree;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
+use Neos\Flow\Annotations as Flow;
+use Neos\Neos\Domain\NodeLabel\NodeLabelGeneratorInterface;
 use Neos\Neos\FrontendRouting\Projection\DocumentUriPathFinder;
 
 /**
- * @internal Renders a document subtree as an indented tree with URI paths.
+ * @internal Renders a document subtree as an indented tree with node labels (like the Neos UI tree).
  *
  * When no node is selected, auto-detects the site root via Neos.Neos:Sites and shows the full document tree.
  * When a node is selected, shows the subtree rooted at that node.
  *
  * @see ContentSubgraphInterface::findSubtree() for the underlying tree lookup.
  * @see DocumentUriPathFinder for optional URI path enrichment.
+ * @see NodeLabelGeneratorInterface for node label resolution from NodeTypes.yaml.
  */
 #[ToolMeta(shortName: 'nDocTree', group: 'Nodes')]
 final class DocumentTreeTool implements ToolInterface
 {
     private const MAX_LEVELS = 4;
+
+    #[Flow\Inject]
+    protected NodeLabelGeneratorInterface $nodeLabelGenerator;
 
     public function getMenuLabel(ToolContext $context): string
     {
@@ -63,17 +70,11 @@ final class DocumentTreeTool implements ToolInterface
 
         $uriPathFinder = $this->resolveUriPathFinder($cr);
 
-        // $navigableNodes: uuid => tree-line-label (uuid as key, tree structure as label)
-        $navigableNodes = [];
-        $this->renderSubtree($subtree, $uriPathFinder, $dsp, '', true, $navigableNodes);
+        /** @var array<string, array<string>> $tableRows uuid => [label, uriPath, type, nodeName] */
+        $tableRows = ['_stay' => ['(stay here)', '', '', '']];
+        $this->renderSubtree($subtree, $uriPathFinder, $dsp, '', true, $tableRows);
 
-        if ($navigableNodes === []) {
-            return null;
-        }
-
-        $choices = ['_stay' => '(stay here)'] + $navigableNodes;
-
-        $selected = $io->choose('Navigate to node', $choices);
+        $selected = $io->chooseFromTable('Navigate to node', ['Label', 'URI Path', 'Type', 'Node Name'], $tableRows);
         if ($selected === '_stay') {
             return null;
         }
@@ -102,54 +103,44 @@ final class DocumentTreeTool implements ToolInterface
             return $sites[0]->aggregateId;
         }
 
-        $choices = [];
+        $rows = [];
         foreach ($sites as $site) {
             $id = $site->aggregateId->value;
-            $choices[$id] = sprintf('%s (%s)', $site->name?->value ?? '-', $site->nodeTypeName->value);
+            $rows[$id] = [sprintf('%s (%s)', $site->name?->value ?? '-', $site->nodeTypeName->value)];
         }
 
-        $selected = $io->choose('Multiple sites found — choose one', $choices);
+        $selected = $io->chooseFromTable('Multiple sites found — choose one', ['Site'], $rows);
         return NodeAggregateId::fromString($selected);
     }
 
-    /**
-     * @param array<string, string> $navigableNodes uuid → tree-line label (for use as choice key → label)
-     * @return list<string> Lines to display (UUID not embedded — UUID is the choice key)
-     */
+    /** @param array<string, array<string>> $tableRows uuid => row columns */
     private function renderSubtree(
         Subtree                $subtree,
         ?DocumentUriPathFinder $uriPathFinder,
         DimensionSpacePoint    $dsp,
         string                 $prefix,
         bool                   $isLast,
-        array                  &$navigableNodes,
+        array                  &$tableRows,
     ): void
     {
         $node = $subtree->node;
         $id = $node->aggregateId->value;
-        $name = $node->name?->value ?? '-';
-        $type = $node->nodeTypeName->value;
 
         $uriPath = $this->resolveUriPath($uriPathFinder, $node->aggregateId, $dsp);
-
         $connector = $subtree->level === 0 ? '' : ($isLast ? '└─ ' : '├─ ');
-        $parts = [];
-        if ($uriPath !== null) {
-            $parts[] = $uriPath;
-        }
-        $parts[] = "({$name})";
-        $parts[] = $type;
 
-        $label = $prefix . $connector . implode(' ', $parts);
-
-        // UUID is the key; tree line (without UUID) is the label shown in choose()
-        $navigableNodes[$id] = strip_tags($label);
+        $tableRows[$id] = [
+            $prefix . $connector . $this->nodeLabel($node),
+            $uriPath ?? '',
+            $node->nodeTypeName->value,
+            $node->name?->value ?? '-',
+        ];
 
         $children = iterator_to_array($subtree->children);
         $childPrefix = $subtree->level === 0 ? '' : $prefix . ($isLast ? '   ' : '│  ');
         $count = count($children);
         foreach ($children as $i => $child) {
-            $this->renderSubtree($child, $uriPathFinder, $dsp, $childPrefix, $i === $count - 1, $navigableNodes);
+            $this->renderSubtree($child, $uriPathFinder, $dsp, $childPrefix, $i === $count - 1, $tableRows);
         }
     }
 
@@ -176,6 +167,15 @@ final class DocumentTreeTool implements ToolInterface
             return $docInfo->hasUriPath() ? '/' . $docInfo->getUriPath() : '/';
         } catch (\Throwable) {
             return null;
+        }
+    }
+
+    private function nodeLabel(Node $node): string
+    {
+        try {
+            return $this->nodeLabelGenerator->getLabel($node);
+        } catch (\Throwable) {
+            return $node->nodeTypeName->value . ' (' . ($node->name?->value ?? '-') . ')';
         }
     }
 }

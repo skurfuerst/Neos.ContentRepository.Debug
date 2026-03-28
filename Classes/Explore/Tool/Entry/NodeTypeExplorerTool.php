@@ -30,37 +30,33 @@ final class NodeTypeExplorerTool implements ToolInterface
     {
         $nodeTypeNames = $contentGraph->findUsedNodeTypeNames();
 
-        $typeChoices = [];
+        $typeRows = [];
         foreach ($nodeTypeNames as $nodeTypeName) {
-            $typeChoices[$nodeTypeName->value] = $nodeTypeName->value;
+            $typeRows[$nodeTypeName->value] = [$nodeTypeName->value];
         }
 
-        if ($typeChoices === []) {
+        if ($typeRows === []) {
             $io->writeLine('No node types in use.');
             return null;
         }
 
-        ksort($typeChoices);
-        $selectedType = $io->choose('Choose node type', $typeChoices);
+        ksort($typeRows);
+        $selectedType = $io->chooseFromTable('Choose node type', ['Node Type'], $typeRows);
 
         $aggregates = $contentGraph->findNodeAggregatesByType(NodeTypeName::fromString($selectedType));
 
-        $choices = ['_stay' => '(stay here)'];
-        $rows = [];
+        $tableRows = ['_stay' => ['(stay here)', '', '']];
         foreach ($aggregates as $aggregate) {
             $id = $aggregate->nodeAggregateId->value;
-            $choices[$id] = sprintf('%s — %s', $id, $aggregate->nodeName?->value ?? '–');
-            $rows[] = [$id, $aggregate->nodeName?->value ?? '–', $aggregate->classification->value];
+            $tableRows[$id] = [$id, $aggregate->nodeName?->value ?? '–', $aggregate->classification->value];
         }
 
-        if ($rows === []) {
+        if (count($tableRows) === 1) {
             $io->writeLine('No aggregates found for this type.');
             return null;
         }
 
-        $io->writeTable(['ID', 'Name', 'Classification'], $rows);
-
-        $selected = $io->choose('Navigate to node', $choices);
+        $selected = $io->chooseFromTable('Navigate to node', ['ID', 'Name', 'Classification'], $tableRows);
         if ($selected === '_stay') {
             return null;
         }

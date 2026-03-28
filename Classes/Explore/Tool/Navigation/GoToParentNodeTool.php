@@ -6,11 +6,14 @@ namespace Neos\ContentRepository\Debug\Explore\Tool\Navigation;
 
 use Neos\ContentRepository\Core\Projection\ContentGraph\ContentSubgraphInterface;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindAncestorNodesFilter;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateId;
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
+use Neos\Flow\Annotations as Flow;
+use Neos\Neos\Domain\NodeLabel\NodeLabelGeneratorInterface;
 
 /**
  * @internal Shows all ancestor nodes as a breadcrumb path and lets the user navigate to any of them.
@@ -20,6 +23,9 @@ use Neos\ContentRepository\Debug\Explore\ToolContext;
 #[ToolMeta(shortName: 'pn', group: 'Nodes')]
 final class GoToParentNodeTool implements ToolInterface
 {
+    #[Flow\Inject]
+    protected NodeLabelGeneratorInterface $nodeLabelGenerator;
+
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Navigate to ancestor';
@@ -39,27 +45,28 @@ final class GoToParentNodeTool implements ToolInterface
         $ancestorList = array_reverse($ancestorList);
 
         $io->writeLine('');
-        $rows = [];
-        $choices = ['_stay' => '(stay here)'];
-        $depth = count($ancestorList);
+        $tableRows = ['_stay' => ['(stay here)', '', '', '']];
         foreach ($ancestorList as $i => $ancestor) {
             $id = $ancestor->aggregateId->value;
-            $name = $ancestor->name?->value ?? '-';
-            $type = $ancestor->nodeTypeName->value;
             $indent = str_repeat('  ', $i);
-            $rows[] = [$indent . $name, $type, $id];
-            $choices[$id] = sprintf('%s%s (%s)', $indent, $name, $type);
-            $depth--;
+            $tableRows[$id] = [$indent . $this->nodeLabel($ancestor), $ancestor->name?->value ?? '-', $ancestor->nodeTypeName->value, $id];
         }
 
-        $io->writeTable(['Name', 'Type', 'ID'], $rows);
-
-        $selected = $io->choose('Navigate to ancestor', $choices);
+        $selected = $io->chooseFromTable('Navigate to ancestor', ['Label', 'Name', 'Type', 'ID'], $tableRows);
         if ($selected === '_stay') {
             return null;
         }
 
         $io->writeInfo(sprintf('✔ Node set to: %s', $selected));
         return $context->with('node', NodeAggregateId::fromString($selected));
+    }
+
+    private function nodeLabel(Node $node): string
+    {
+        try {
+            return $this->nodeLabelGenerator->getLabel($node);
+        } catch (\Throwable) {
+            return $node->nodeTypeName->value . ' (' . ($node->name?->value ?? '-') . ')';
+        }
     }
 }

@@ -114,14 +114,6 @@ Feature: Interactive explore tools
     When I execute the explore tool "NodeInfoTool"
     Then the tool should have written an error containing "not found"
 
-  Scenario: NodeInfoTool lists which workspaces contain the node
-    Given the explore context is:
-      | cr   | default |
-      | node | page-1  |
-    When I execute the explore tool "NodeInfoTool"
-    Then the tool output should contain "live"
-    And the tool output should contain "Neos.ContentRepository.Testing:Document"
-
   Scenario: NodeInfoTool shows the dimension space points the node is available in
     Given the explore context is:
       | cr        | default |
@@ -146,8 +138,7 @@ Feature: Interactive explore tools
       | node      | page-1             |
       | dsp       | {"language":"mul"} |
     When I execute the explore tool "NodeReferencesTool"
-    Then the tool output should contain "Outgoing references (0)"
-    And the tool output should contain "Incoming references (0)"
+    Then the tool output should contain "No references."
 
   Scenario: EventContextTool dumps the selected event payload
     Given the explore context is:

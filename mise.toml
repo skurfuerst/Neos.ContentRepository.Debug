@@ -17,7 +17,9 @@ run = 'docker compose -f ../../../docker-compose.yml exec neos bash -c "cd /app 
 
 [tasks."cr:explore"]
 description = "Run the interactive CR explorer (pass args after --: mise run cr:explore -- --node=abc)"
-run = 'docker compose -f ../../../docker-compose.yml exec neos bash -c "cd /app && ./flow cr:explore $@"'
+run = '''
+docker compose -f ../../../docker-compose.yml exec neos bash -c 'cd /app && ./flow cr:explore "$@"' -- "$@"
+'''
 
 [tasks."test:behavior"]
 description = "Run behavioral tests (usage: mise run test:behavior [Features/ContentRepository/NodeDisabling.feature])"
