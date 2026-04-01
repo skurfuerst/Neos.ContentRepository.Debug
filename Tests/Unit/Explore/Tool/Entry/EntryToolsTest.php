@@ -72,6 +72,8 @@ final class AskingToolIO implements ToolIOInterface
     public function writeNote(string $message): void {}
     public function chooseFromTable(string $question, array $headers, array $rows): string { return (string)array_key_first($rows); }
     public function ask(string $question, ?callable $autocomplete = null): string { return $this->answer; }
+    public function confirm(string $question, bool $default = false): bool { return $default; }
+    public function progress(string $label, int $total, \Closure $callback): void { $callback(static function(): void {}); }
     public function chooseMultiple(string $question, array $choices, array $default = []): array { return $default; }
     public function chooseFromMenu(ToolMenu $menu): string { return $menu->available()[0]->shortName ?? ''; }
 }

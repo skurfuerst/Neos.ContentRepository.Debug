@@ -5,52 +5,43 @@ declare(strict_types=1);
 namespace Neos\ContentRepository\Debug\Explore\Tool\ContentRepository;
 
 use Doctrine\DBAL\Connection;
-use Neos\ContentRepository\Core\Service\ContentRepositoryMaintainerFactory;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
-use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
-use Neos\Flow\Core\Bootstrap;
-use Neos\Utility\ObjectAccess;
 
 /**
- * @internal Copies all tables of a CR (events, subscriptions, projections) to a target CR.
+ * @internal Copies all tables of a CR (events, subscriptions, projections) to a target CR via exact
+ *           DB-level clone — {@see CrCopyTool::execute()} for full flow description.
  *
  * Use this to create a safe shadow CR before running {@see EventGraveyardTool}.
- * The target CR is set up via setUp() first, then all source tables are TRUNCATE + INSERT-SELECTed.
- * Graveyard tables are excluded so accumulated graveyard data is preserved across runs.
- *
- * Only available in Development context.
  */
 #[ToolMeta(shortName: 'crCopy', group: 'ContentRepository')]
 #[Flow\Scope('singleton')]
 final class CrCopyTool implements ToolInterface
 {
     #[Flow\Inject]
-    protected ContentRepositoryRegistry $crRegistry;
-
-    #[Flow\Inject]
     protected Connection $dbal;
-
-    #[Flow\Inject]
-    protected Bootstrap $bootstrap;
 
     public function getMenuLabel(ToolContext $context): string
     {
-        return 'Copy CR tables to another CR (⚠ DEV only)';
+        return 'Copy CR tables to another CR (exact DB-level clone)';
     }
 
+    /**
+     * Copies all tables with the source CR prefix to a new target CR prefix via:
+     *   1. DROP existing target tables (with confirm if events table has rows)
+     *   2. CREATE TABLE {dst} LIKE {src}  (exact structure clone)
+     *   3. INSERT INTO {dst} SELECT * FROM {src}  (exact data clone)
+     *
+     * No Neos/Flow CR layer is involved — this operates purely at the DBAL level.
+     */
     public function execute(
         ToolIOInterface $io,
         ContentRepositoryId $cr,
     ): ?ToolContext {
-        if (!$this->bootstrap->getContext()->isDevelopment()) {
-            throw new \LogicException('CrCopyTool may only run in Development context.', 1748100002);
-        }
-
         $targetId = trim($io->ask('Target CR ID (≤ 16 chars, e.g. "default_shadow"):'));
         if ($targetId === '') {
             $io->writeLine('Aborted.');
@@ -69,77 +60,83 @@ final class CrCopyTool implements ToolInterface
             return null;
         }
 
-        // Discover which source tables exist (excluding graveyard tables)
+        // Discover all source tables (no exclusions — exact clone includes graveyard)
         $srcPrefix = 'cr_' . $cr->value . '_';
-        $tables = $this->dbal->fetchFirstColumn(
+        /** @var list<string> $srcTables */
+        $srcTables = $this->dbal->fetchFirstColumn(
             "SELECT table_name FROM information_schema.tables
              WHERE table_schema = DATABASE()
              AND table_name LIKE :prefix
-             AND table_name NOT LIKE '%_graveyard'
              ORDER BY table_name",
             ['prefix' => $srcPrefix . '%']
         );
 
-        if ($tables === []) {
+        if ($srcTables === []) {
             $io->writeError('No tables found for source CR "' . $cr->value . '".');
             return null;
         }
 
-        $io->writeError(sprintf(
-            'Will set up target CR "%s" and copy %d table(s) from "%s". Target tables will be TRUNCATED.',
-            $targetCrId->value,
-            count($tables),
-            $cr->value
-        ));
-        $confirm = trim($io->ask('Type "yes" to confirm'));
-        if ($confirm !== 'yes') {
-            $io->writeLine('Aborted.');
-            return null;
-        }
-
-        // Set up the target CR (creates tables with fresh BOOTING subscriptions)
-        $io->writeLine('Setting up target CR "' . $targetCrId->value . '"…');
-        $this->setupTargetCr($cr, $targetCrId);
-
-        // Copy all tables
+        // Check if target CR tables already exist
         $dstPrefix = 'cr_' . $targetCrId->value . '_';
-        $copied = 0;
+        /** @var list<string> $existingDstTables */
+        $existingDstTables = $this->dbal->fetchFirstColumn(
+            "SELECT table_name FROM information_schema.tables
+             WHERE table_schema = DATABASE()
+             AND table_name LIKE :prefix
+             ORDER BY table_name",
+            ['prefix' => $dstPrefix . '%']
+        );
 
-        $io->progress(sprintf('Copying %d table(s)', count($tables)), count($tables), function (callable $advance) use ($tables, $srcPrefix, $dstPrefix, &$copied): void {
-            foreach ($tables as $srcTable) {
-                $suffix = substr($srcTable, strlen($srcPrefix));
-                $dstTable = $dstPrefix . $suffix;
-                if ($this->tableExists($dstTable)) {
-                    $this->dbal->executeStatement("TRUNCATE TABLE {$dstTable}");
-                    $this->dbal->executeStatement("INSERT INTO {$dstTable} SELECT * FROM {$srcTable}");
-                    $copied++;
+        if ($existingDstTables !== []) {
+            // Only prompt for confirmation if the events table is non-empty
+            $dstEventsTable = $dstPrefix . 'events';
+            $eventsCount = in_array($dstEventsTable, $existingDstTables, strict: true)
+                ? (int)$this->dbal->fetchOne("SELECT COUNT(*) FROM {$dstEventsTable}")
+                : 0;
+
+            if ($eventsCount > 0) {
+                $confirmed = $io->confirm(sprintf(
+                    'Target CR "%s" already exists and has %d event(s). Drop all target tables and overwrite?',
+                    $targetCrId->value,
+                    $eventsCount,
+                ));
+                if (!$confirmed) {
+                    $io->writeLine('Aborted.');
+                    return null;
                 }
-                $advance();
             }
-        });
 
-        $io->writeInfo(sprintf('Done. Copied %d table(s) to "%s".', $copied, $targetCrId->value));
-        return null;
-    }
-
-    private function setupTargetCr(ContentRepositoryId $sourceCrId, ContentRepositoryId $targetCrId): void
-    {
-        $settings = ObjectAccess::getProperty($this->crRegistry, 'settings', forceDirectAccess: true);
-        $settings['contentRepositories'][$targetCrId->value] = $settings['contentRepositories'][$sourceCrId->value];
-        $this->crRegistry->injectSettings($settings);
-
-        $maintainer = $this->crRegistry->buildService($targetCrId, new ContentRepositoryMaintainerFactory());
-        $error = $maintainer->setUp();
-        if ($error !== null) {
-            throw new \RuntimeException('Target CR setUp failed: ' . $error->getMessage(), 1748100003);
+            foreach ($existingDstTables as $table) {
+                $this->dbal->executeStatement("DROP TABLE {$table}");
+            }
         }
-    }
 
-    private function tableExists(string $tableName): bool
-    {
-        return (int)$this->dbal->fetchOne(
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = :t",
-            ['t' => $tableName]
-        ) > 0;
+        // Exact DB-level clone: CREATE TABLE … LIKE + INSERT INTO … SELECT *
+        /** @var list<array{src: string, dst: string, rows: int}> $result */
+        $result = [];
+
+        $io->progress(
+            sprintf('Copying %d table(s) from "%s" to "%s"', count($srcTables), $cr->value, $targetCrId->value),
+            count($srcTables),
+            function (callable $advance) use ($srcTables, $srcPrefix, $dstPrefix, &$result): void {
+                foreach ($srcTables as $srcTable) {
+                    $suffix = substr($srcTable, strlen($srcPrefix));
+                    $dstTable = $dstPrefix . $suffix;
+                    $rows = (int)$this->dbal->fetchOne("SELECT COUNT(*) FROM {$srcTable}");
+                    $this->dbal->executeStatement("CREATE TABLE {$dstTable} LIKE {$srcTable}");
+                    $this->dbal->executeStatement("INSERT INTO {$dstTable} SELECT * FROM {$srcTable}");
+                    $result[] = ['src' => $srcTable, 'dst' => $dstTable, 'rows' => $rows];
+                    $advance();
+                }
+            }
+        );
+
+        $io->writeTable(
+            ['Source Table', 'Target Table', 'Rows'],
+            array_map(fn(array $r) => [$r['src'], $r['dst'], (string)$r['rows']], $result),
+        );
+
+        $io->writeInfo(sprintf('Done. Copied %d table(s) to "%s".', count($result), $targetCrId->value));
+        return null;
     }
 }

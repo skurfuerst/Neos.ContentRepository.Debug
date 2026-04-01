@@ -5,6 +5,7 @@ namespace Neos\ContentRepository\Debug\Command;
 use Doctrine\DBAL\Connection;
 use Neos\ContentRepository\Core\Service\ContentRepositoryMaintainerFactory;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
+use Neos\ContentRepository\Debug\ContentRepository\DynamicContentRepositoryRegistrar;
 use Neos\ContentRepository\Core\Subscription\DetachedSubscriptionStatus;
 use Neos\ContentRepository\Core\Subscription\ProjectionSubscriptionStatus;
 use Neos\ContentRepository\Core\Subscription\SubscriptionStatus;
@@ -38,6 +39,7 @@ class CrCommandController extends CommandController
         protected readonly ContentRepositoryRegistry $contentRepositoryRegistry,
         private readonly Connection                  $connection,
         private readonly ExploreSessionFactory       $exploreSessionFactory,
+        private readonly DynamicContentRepositoryRegistrar $dynamicRegistrar,
     ) {
         parent::__construct();
         $this->debugger = new ContentRepositoryDebugger($this->contentRepositoryRegistry, $this->connection);
@@ -50,14 +52,14 @@ class CrCommandController extends CommandController
      *   ./flow cr:explore --node=<uuid> --workspace=live --dsp='{"language":"en"}'
      */
     public function exploreCommand(
-        string $contentRepository = 'default',
+        string $cr = 'default',
         ?string $node = null,
         ?string $workspace = null,
         ?string $dsp = null,
     ): void {
         $dispatcher = $this->exploreSessionFactory->buildDispatcher();
         $ctx = $this->exploreSessionFactory->buildInitialContext([
-            'cr' => $contentRepository,
+            'cr' => $cr,
             'node' => $node,
             'workspace' => $workspace,
             'dsp' => $dsp,
@@ -80,10 +82,56 @@ class CrCommandController extends CommandController
         };
 
         $io = new CliToolIO($this->menuColumns);
-        $this->displaySubscriptionWarnings(ContentRepositoryId::fromString($contentRepository), $io);
+
+        $crId = ContentRepositoryId::fromString($cr);
+        if (!$this->dynamicRegistrar->isRegistered($crId)) {
+            $this->registerDynamicCrOrAbort($crId, $io);
+        }
+
+        $this->displaySubscriptionWarnings($crId, $io);
 
         $session = new ExploreSession($dispatcher, $resumeCommandBuilder);
         $session->run($ctx, $io);
+    }
+
+    /**
+     * Prompts the user to pick a source CR for config and registers the dynamic CR.
+     * Terminates the process if no configured CRs exist or the user aborts.
+     */
+    private function registerDynamicCrOrAbort(ContentRepositoryId $dynamicId, ToolIOInterface $io): void
+    {
+        $configuredIds = [];
+        foreach ($this->contentRepositoryRegistry->getContentRepositoryIds() as $id) {
+            $configuredIds[$id->value] = $id;
+        }
+
+        if ($configuredIds === []) {
+            $io->writeError(sprintf(
+                'CR "%s" is not configured and no configured CRs are available to use as config source.',
+                $dynamicId->value,
+            ));
+            exit(1);
+        }
+
+        $io->writeNote(sprintf('CR "%s" is not configured in Flow settings — it appears to be a DB copy.', $dynamicId->value));
+
+        if (count($configuredIds) === 1) {
+            $sourceId = reset($configuredIds);
+        } else {
+            $rows = [];
+            foreach ($configuredIds as $value => $id) {
+                $rows[$value] = [$value];
+            }
+            $selected = $io->chooseFromTable(
+                'Which content repository should provide the configuration for this copy?',
+                ['Source CR'],
+                $rows,
+            );
+            $sourceId = $configuredIds[$selected] ?? reset($configuredIds);
+        }
+
+        $this->dynamicRegistrar->register($dynamicId, $sourceId);
+        $io->writeInfo(sprintf('Registered "%s" using config from "%s".', $dynamicId->value, $sourceId->value));
     }
 
     /**

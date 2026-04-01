@@ -63,6 +63,11 @@ final class CliToolIO implements ToolIOInterface
         return (string)(new TextPrompt(label: $question, required: false))->prompt();
     }
 
+    public function confirm(string $question, bool $default = false): bool
+    {
+        return (bool)(new \Laravel\Prompts\ConfirmPrompt(label: $question, default: $default))->prompt();
+    }
+
     public function chooseMultiple(string $question, array $choices, array $default = []): array
     {
         // laravel/prompts multiselect: arrow keys + space to toggle, returns selected keys.

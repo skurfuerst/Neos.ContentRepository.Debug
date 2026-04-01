@@ -65,6 +65,12 @@ interface ToolIOInterface
     public function chooseFromMenu(ToolMenu $menu): string;
 
     /**
+     * Boolean yes/no confirmation prompt.
+     * In CLI rendered as a ConfirmPrompt (Y/n); in MCP/test consumed from the answer queue.
+     */
+    public function confirm(string $question, bool $default = false): bool;
+
+    /**
      * Run a task with a live progress bar.
      * Calls $callback with a $advance callable — call $advance() after each completed step.
      *

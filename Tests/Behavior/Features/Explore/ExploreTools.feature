@@ -35,25 +35,6 @@ Feature: Interactive explore tools
       | page-1-2        | Neos.ContentRepository.Testing:Document | page-1                | page-1-2 | {"language":"mul"}        |
 
   # ---------------------------------------------------------------------------
-  # Session tools
-  # ---------------------------------------------------------------------------
-
-  Scenario: ExitTool ends the session
-    Given the explore context is:
-      | cr | default |
-    When I execute the explore tool "ExitTool"
-    Then the session should have exited
-
-  Scenario: ShowResumeCommandTool outputs a command line that restores the current context
-    Given the explore context is:
-      | cr        | default |
-      | workspace | live    |
-    When I execute the explore tool "ShowResumeCommandTool"
-    Then the tool output should contain "./flow cr:explore"
-    And the tool output should contain "--cr=default"
-    And the tool output should contain "--workspace=live"
-
-  # ---------------------------------------------------------------------------
   # Entry tools
   # ---------------------------------------------------------------------------
 

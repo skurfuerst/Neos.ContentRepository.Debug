@@ -82,6 +82,16 @@ final class McpToolIO implements ToolIOInterface
         return $answer;
     }
 
+    public function confirm(string $question, bool $default = false): bool
+    {
+        $ordinal = $this->nextOrdinal++;
+        $answer = array_shift($this->answerQueue);
+        if ($answer === null) {
+            throw new McpInteractionRequiredException('confirm', $question, ['yes' => 'Yes', 'no' => 'No'], $ordinal);
+        }
+        return in_array(strtolower(trim($answer)), ['yes', 'true', '1'], strict: true);
+    }
+
     public function chooseMultiple(string $question, array $choices, array $default = []): array
     {
         $ordinal = $this->nextOrdinal++;

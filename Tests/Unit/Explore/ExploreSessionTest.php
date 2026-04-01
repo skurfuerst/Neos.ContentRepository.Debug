@@ -76,8 +76,9 @@ class ExploreSessionTest extends TestCase
         $io = new ScriptedToolIO(['0']);
 
         $renderCount = 0;
-        $session = new ExploreSession($dispatcher, function (ToolContext $ctx, ToolIOInterface $io) use (&$renderCount): void {
+        $session = new ExploreSession($dispatcher, function (ToolContext $ctx) use (&$renderCount): string {
             $renderCount++;
+            return '';
         });
         $session->run(ToolContext::empty(), $io);
 
@@ -135,6 +136,8 @@ final class ScriptedToolIO implements ToolIOInterface
     public function chooseFromTable(string $question, array $headers, array $rows): string { return (string)array_key_first($rows); }
     public function ask(string $question, ?callable $autocomplete = null): string { return ''; }
 
+    public function confirm(string $question, bool $default = false): bool { return $default; }
+    public function progress(string $label, int $total, \Closure $callback): void { $callback(static function(): void {}); }
     public function chooseMultiple(string $question, array $choices, array $default = []): array { return $default; }
 
     public function chooseFromMenu(ToolMenu $menu): string

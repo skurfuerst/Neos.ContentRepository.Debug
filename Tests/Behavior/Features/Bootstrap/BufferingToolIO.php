@@ -81,6 +81,15 @@ final class BufferingToolIO implements ToolIOInterface
         return array_shift($this->answerQueue) ?? '';
     }
 
+    public function confirm(string $question, bool $default = false): bool
+    {
+        $answer = array_shift($this->answerQueue);
+        if ($answer === null) {
+            return $default;
+        }
+        return in_array(strtolower(trim($answer)), ['yes', 'true', '1'], strict: true);
+    }
+
     public function chooseMultiple(string $question, array $choices, array $default = []): array
     {
         $queued = array_shift($this->multiChoiceQueue) ?? '';

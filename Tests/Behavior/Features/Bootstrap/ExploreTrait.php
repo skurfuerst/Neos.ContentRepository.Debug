@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Behat\Gherkin\Node\TableNode;
+use Doctrine\DBAL\Connection;
 use Neos\ContentRepository\Debug\Explore\ExploreSession;
 use Neos\ContentRepository\Debug\Explore\ExploreSessionFactory;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
@@ -101,6 +102,39 @@ trait ExploreTrait
     }
 
     /**
+     * Drop all DB tables whose names start with the given prefix.
+     * Use this in feature files to clean up shadow CR tables left from previous runs.
+     *
+     * @Given all DB tables with prefix :prefix are dropped
+     */
+    public function allDbTablesWithPrefixAreDropped(string $prefix): void
+    {
+        /** @var Connection $dbal */
+        $dbal = $this->getObject(Connection::class);
+        /** @var list<string> $tables */
+        $tables = $dbal->fetchFirstColumn(
+            'SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE :prefix',
+            ['prefix' => $prefix . '%'],
+        );
+        foreach ($tables as $table) {
+            $dbal->executeStatement("DROP TABLE IF EXISTS {$table}");
+        }
+    }
+
+    /**
+     * For tools that need two sequential ask()/confirm() inputs.
+     *
+     * @When I execute the explore tool :toolName and answer :answer1 and answer :answer2
+     */
+    public function iExecuteTheExploreToolAndAnswerAndAnswer(string $toolName, string $answer1, string $answer2): void
+    {
+        $io = new BufferingToolIO();
+        $io->queueAnswer($answer1);
+        $io->queueAnswer($answer2);
+        $this->runTool($toolName, $io);
+    }
+
+    /**
      * For tools that ask() for input and then call chooseMultiple() (e.g. EventContextTool).
      * The :keys argument is a comma-separated list of choice keys.
      *
@@ -146,6 +180,15 @@ trait ExploreTrait
         $errors = $this->lastToolIO->getErrors();
         Assert::assertNotEmpty($errors, 'Expected at least one error to have been written.');
         Assert::assertStringContainsString($text, implode("\n", $errors));
+    }
+
+    /**
+     * @Then the explore context should not have :name
+     */
+    public function theExploreContextShouldNotHave(string $name): void
+    {
+        $contextValue = $this->exploreContext->get($name);
+        Assert::assertNull($contextValue, "Expected context to NOT have '$name' set.");
     }
 
     /**
