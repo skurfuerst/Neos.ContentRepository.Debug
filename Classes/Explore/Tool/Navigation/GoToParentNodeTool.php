@@ -12,7 +12,6 @@ use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
-use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Domain\NodeLabel\NodeLabelGeneratorInterface;
 
 /**
@@ -23,17 +22,21 @@ use Neos\Neos\Domain\NodeLabel\NodeLabelGeneratorInterface;
 #[ToolMeta(shortName: 'pn', group: 'Nodes')]
 final class GoToParentNodeTool implements ToolInterface
 {
-    #[Flow\Inject]
-    protected NodeLabelGeneratorInterface $nodeLabelGenerator;
+    public function __construct(
+        private readonly NodeLabelGeneratorInterface $nodeLabelGenerator,
+        private readonly ToolContext $context,
+        private readonly ContentSubgraphInterface $subgraph,
+        private readonly NodeAggregateId $node,
+    ) {}
 
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Navigate to ancestor';
     }
 
-    public function execute(ToolIOInterface $io, ToolContext $context, ContentSubgraphInterface $subgraph, NodeAggregateId $node): ?ToolContext
+    public function execute(ToolIOInterface $io): ?ToolContext
     {
-        $ancestors = $subgraph->findAncestorNodes($node, FindAncestorNodesFilter::create());
+        $ancestors = $this->subgraph->findAncestorNodes($this->node, FindAncestorNodesFilter::create());
         $ancestorList = iterator_to_array($ancestors);
 
         if ($ancestorList === []) {
@@ -58,7 +61,7 @@ final class GoToParentNodeTool implements ToolInterface
         }
 
         $io->writeInfo(sprintf('✔ Node set to: %s', $selected));
-        return $context->with('node', NodeAggregateId::fromString($selected));
+        return $this->context->with('node', NodeAggregateId::fromString($selected));
     }
 
     private function nodeLabel(Node $node): string

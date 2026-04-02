@@ -21,24 +21,30 @@ use Neos\Neos\FrontendRouting\Projection\DocumentUriPathFinder;
 #[ToolMeta(shortName: 'uriPath', group: 'Other')]
 final class NodeRoutingTool implements ToolInterface
 {
+    public function __construct(
+        private readonly ContentRepository $cr,
+        private readonly NodeAggregateId $node,
+        private readonly DimensionSpacePoint $dsp,
+    ) {}
+
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Node: URI path';
     }
 
-    public function execute(ToolIOInterface $io, ContentRepository $cr, NodeAggregateId $node, DimensionSpacePoint $dsp): ?ToolContext
+    public function execute(ToolIOInterface $io): ?ToolContext
     {
         try {
-            $finder = $cr->projectionState(DocumentUriPathFinder::class);
+            $finder = $this->cr->projectionState(DocumentUriPathFinder::class);
         } catch (\Throwable) {
             $io->writeError('DocumentUriPathFinder projection not available in this content repository.');
             return null;
         }
 
         try {
-            $docInfo = $finder->getByIdAndDimensionSpacePointHash($node, $dsp->hash);
+            $docInfo = $finder->getByIdAndDimensionSpacePointHash($this->node, $this->dsp->hash);
         } catch (\Throwable) {
-            $io->writeError(sprintf('No routing information found for node "%s" in this dimension.', $node->value));
+            $io->writeError(sprintf('No routing information found for node "%s" in this dimension.', $this->node->value));
             return null;
         }
 

@@ -3,13 +3,8 @@
 declare(strict_types=1);
 
 use Neos\ContentRepository\Debug\Explore\ExploreSession;
-use Neos\ContentRepository\Debug\Explore\ExploreSessionFactory;
 use Neos\ContentRepository\Debug\Explore\MCP\McpInteractionRequiredException;
 use Neos\ContentRepository\Debug\Explore\MCP\McpToolIO;
-use Neos\ContentRepository\Debug\Explore\Tool\AutoRunToolInterface;
-use Neos\ContentRepository\Debug\Explore\Tool\Session\ExitTool;
-use Neos\ContentRepository\Debug\Explore\Tool\Session\ShowResumeCommandTool;
-use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use PHPUnit\Framework\Assert;
 
 /**
@@ -187,10 +182,10 @@ trait McpExploreTrait
         $this->lastInteraction = null;
         $this->lastAvailableTools = [];
 
-        $tool = $this->findToolByShortName($toolName);
+        $toolClass = $this->findToolClassByName($toolName);
 
         try {
-            $result = $this->exploreDispatcher->execute($tool, $this->exploreContext, $io);
+            $result = $this->exploreDispatcher->execute($toolClass, $this->exploreContext, $io);
         } catch (McpInteractionRequiredException $e) {
             $this->lastInteraction = $e;
             return;
@@ -200,10 +195,8 @@ trait McpExploreTrait
             $this->exploreContext = $result;
 
             // Auto-run tools on context change (same as ExploreSession and MCP tool)
-            foreach ($this->exploreDispatcher->availableTools($this->exploreContext) as $autoTool) {
-                if ($autoTool instanceof AutoRunToolInterface) {
-                    $this->exploreDispatcher->execute($autoTool, $this->exploreContext, $io);
-                }
+            foreach ($this->exploreDispatcher->buildMenu($this->exploreContext)->availableAutoRun() as $autoItem) {
+                $this->exploreDispatcher->execute($autoItem->toolClass, $this->exploreContext, $io);
             }
         }
 
@@ -212,13 +205,14 @@ trait McpExploreTrait
     }
 
     /**
-     * @return array<string, string> tool short name => menu label
+     * @return array<string, string> tool class basename => menu label
      */
     private function buildAvailableToolsList(): array
     {
         $tools = [];
-        foreach ($this->exploreDispatcher->availableTools($this->exploreContext) as $tool) {
-            $tools[(new \ReflectionClass($tool))->getShortName()] = $tool->getMenuLabel($this->exploreContext);
+        foreach ($this->exploreDispatcher->buildMenu($this->exploreContext)->available() as $item) {
+            $parts = explode('\\', $item->toolClass);
+            $tools[end($parts)] = $item->label;
         }
         return $tools;
     }

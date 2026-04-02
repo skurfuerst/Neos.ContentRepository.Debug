@@ -16,7 +16,8 @@ class NodeInfoToolTest extends TestCase
 {
     public function test_label(): void
     {
-        $tool = new NodeInfoTool();
+        // getMenuLabel() must not access $this — use newInstanceWithoutConstructor() to verify
+        $tool = (new \ReflectionClass(NodeInfoTool::class))->newInstanceWithoutConstructor();
         self::assertSame('Node info', $tool->getMenuLabel(ToolContext::empty()));
     }
 }

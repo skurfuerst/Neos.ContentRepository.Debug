@@ -5,54 +5,51 @@ declare(strict_types=1);
 namespace Neos\ContentRepository\Debug\Explore;
 
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
+use Neos\ContentRepository\Debug\Explore\Tool\AutoRunToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
+use Neos\ContentRepository\Debug\Explore\Tool\WithContextChangeInterface;
+
 /**
- * @internal Matches tools against the current {@see ToolContext} by reflecting on execute() parameter types,
- *           then invokes the selected tool with resolved arguments — tool authors never reference this directly.
+ * @internal Matches tools against the current {@see ToolContext} by inspecting constructor parameter types,
+ *           then builds and invokes tool instances via {@see ToolBuilder} — tool authors never reference this.
  *
  * @see ToolInterface for the execute() signature contract.
+ * @see ToolBuilder for the per-dispatch construction logic.
  */
-
 final class ToolDispatcher
 {
-    /** @var list<ToolInterface> */
-    private readonly array $tools;
+    /** @var list<class-string<ToolInterface>> */
+    private readonly array $toolClasses;
 
     /**
-     * @param iterable<ToolInterface> $tools
-     * @param array<class-string, \Closure(ToolContext): ?object> $derivedResolvers Lazy resolvers for types
-     *        derived from context (e.g. ContentRepository from ContentRepositoryId). Return null = unavailable.
+     * @param list<class-string<ToolInterface>> $toolClasses
+     * @param array<class-string, \Closure(ToolContext): ?object> $derivedResolvers Lazy resolvers for derived types
+     *        (e.g. ContentRepository from ContentRepositoryId). Return null = unavailable.
      * @param array<class-string, list<class-string>> $derivedDependencies Maps each derived type to the
-     *        registered context types it depends on — used by {@see missingContextTypes()} to report
-     *        which underlying context values are missing when the resolver returns null.
-     * @throws \LogicException if any tool's execute() declares a parameter type that is neither
-     *                         {@see ToolIOInterface} nor a type registered in {@see ToolContextRegistry}.
+     *        registered context types it depends on — used by {@see ToolBuilder::missingContextTypes()} to
+     *        report which underlying context values are missing when the resolver returns null.
+     * @throws \LogicException if any class does not implement {@see ToolInterface}.
      */
     public function __construct(
         private readonly ToolContextRegistry $registry,
-        iterable $tools,
+        private readonly ToolBuilder $builder,
+        iterable $toolClasses,
         private readonly array $derivedResolvers = [],
         private readonly array $derivedDependencies = [],
     ) {
         $validated = [];
-        foreach ($tools as $tool) {
-            $this->validateTool($tool);
-            $validated[] = $tool;
-        }
-        $this->tools = $validated;
-    }
-
-    /** @return list<ToolInterface> */
-    public function availableTools(ToolContext $context): array
-    {
-        $available = [];
-        foreach ($this->tools as $tool) {
-            if ($this->isAvailable($tool, $context)) {
-                $available[] = $tool;
+        foreach ($toolClasses as $toolClass) {
+            if (!is_a($toolClass, ToolInterface::class, true)) {
+                throw new \LogicException(sprintf(
+                    'Class %s does not implement %s.',
+                    $toolClass,
+                    ToolInterface::class,
+                ));
             }
+            $validated[] = $toolClass;
         }
-        return $available;
+        $this->toolClasses = $validated;
     }
 
     /**
@@ -64,24 +61,27 @@ final class ToolDispatcher
      */
     public function buildMenu(ToolContext $context, string $contextDisplay = ''): ToolMenu
     {
-        // Collect items per group, Session group deferred to end
         /** @var array<string, list<ToolMenuItem>> $byGroup */
         $byGroup = [];
         /** @var list<ToolMenuItem> $sessionItems */
         $sessionItems = [];
 
-        foreach ($this->tools as $tool) {
-            $meta = $this->resolveToolMeta($tool);
-            $available = $this->isAvailable($tool, $context);
-            $missing = $available ? [] : $this->missingContextTypes($tool, $context);
-            $required = $this->requiredContextTypes($tool);
+        foreach ($this->toolClasses as $toolClass) {
+            $meta = $this->resolveToolMeta($toolClass);
+            $available = $this->builder->canBuild($toolClass, $context, $this->derivedResolvers);
+            $missing = $available ? [] : $this->builder->missingContextTypes($toolClass, $context, $this->derivedResolvers, $this->derivedDependencies);
+            $required = $this->builder->requiredContextTypes($toolClass);
+
+            // Build a label-only shell (no constructor called) to call getMenuLabel($context).
+            // getMenuLabel() implementations must not access $this — only $context.
+            $labelShell = $this->builder->buildForLabel($toolClass);
 
             $item = new ToolMenuItem(
                 shortName: $meta->shortName,
-                label: $tool->getMenuLabel($context),
+                label: $labelShell->getMenuLabel($context),
                 group: $meta->group,
                 available: $available,
-                tool: $tool,
+                toolClass: $toolClass,
                 missingContextTypes: $missing,
                 requiredContextTypes: $required,
             );
@@ -113,25 +113,79 @@ final class ToolDispatcher
     }
 
     /**
+     * Build and execute a tool. Throws if the tool cannot be built (should be checked via canBuild first).
+     *
+     * @param class-string<ToolInterface> $toolClass
+     */
+    public function execute(string $toolClass, ToolContext $context, ToolIOInterface $io): ?ToolContext
+    {
+        $tool = $this->builder->build($toolClass, $context, $this->derivedResolvers);
+        if ($tool === null) {
+            throw new \RuntimeException(sprintf(
+                'Tool %s cannot be built for the current context — call canBuild() before execute().',
+                $toolClass,
+            ));
+        }
+        return $tool->execute($io);
+    }
+
+    /**
+     * Calls `onContextChange()` on all tools implementing {@see WithContextChangeInterface}.
+     *
+     * Two passes guarantee setup (e.g. dynamic CR registration) before derived-service consumers:
+     *   - Pass 1: tools whose constructor needs no derived types (only registered context types + framework services)
+     *   - Pass 2: tools whose constructor needs at least one derived type (e.g. ContentRepositoryMaintainer)
+     *
+     * Tools whose required constructor params cannot be resolved from $new are silently skipped.
+     */
+    public function notifyContextChange(ToolContext $old, ToolContext $new, ToolIOInterface $io): void
+    {
+        $pass1 = [];
+        $pass2 = [];
+        foreach ($this->toolClasses as $toolClass) {
+            if (!is_a($toolClass, WithContextChangeInterface::class, true)) {
+                continue;
+            }
+            if (!method_exists($toolClass, 'onContextChange')) {
+                continue;
+            }
+            if ($this->builder->constructorHasDerivedParam($toolClass, $this->derivedResolvers)) {
+                $pass2[] = $toolClass;
+            } else {
+                $pass1[] = $toolClass;
+            }
+        }
+
+        foreach ([$pass1, $pass2] as $pass) {
+            foreach ($pass as $toolClass) {
+                $tool = $this->builder->build($toolClass, $new, $this->derivedResolvers);
+                if ($tool === null) {
+                    continue; // required dep missing — skip silently
+                }
+                $tool->onContextChange($old, $new, $io);
+            }
+        }
+    }
+
+    /**
      * Read the {@see ToolMeta} attribute from the tool class, falling back to derived values:
      * - shortName: class basename without "Tool" suffix, CamelCase → kebab-case
      * - group: last namespace segment before "Tool\" sub-namespace (e.g. Tool\Node → "Node")
+     *
+     * @param class-string<ToolInterface> $toolClass
      */
-    private function resolveToolMeta(ToolInterface $tool): ToolMeta
+    private function resolveToolMeta(string $toolClass): ToolMeta
     {
-        $ref = new \ReflectionClass($tool);
+        $ref = new \ReflectionClass($toolClass);
         $attrs = $ref->getAttributes(ToolMeta::class);
         if ($attrs !== []) {
             return $attrs[0]->newInstance();
         }
 
-        // Derive shortName from class basename
         $baseName = $ref->getShortName();
         $withoutSuffix = preg_replace('/Tool$/', '', $baseName) ?? $baseName;
-        // CamelCase → kebab-case
         $shortName = strtolower((string)preg_replace('/(?<!^)[A-Z]/', '-$0', $withoutSuffix));
 
-        // Derive group from namespace segment after "Tool\"
         $ns = $ref->getNamespaceName();
         if (preg_match('/\\\\Tool\\\\([^\\\\]+)/', $ns, $m)) {
             $group = $m[1];
@@ -140,174 +194,5 @@ final class ToolDispatcher
         }
 
         return new ToolMeta(shortName: $shortName, group: $group);
-    }
-
-    /**
-     * Collect registered context-type names that are required by the tool's execute() but absent
-     * from $context. For derived types whose resolver returns null, reports the underlying
-     * context-type dependencies that are missing (via {@see $derivedDependencies}).
-     *
-     * @return list<string>
-     */
-    private function missingContextTypes(ToolInterface $tool, ToolContext $context): array
-    {
-        $missing = [];
-        $method = new \ReflectionMethod($tool, 'execute');
-        foreach ($method->getParameters() as $param) {
-            $type = $param->getType();
-            if (!$type instanceof \ReflectionNamedType) {
-                continue;
-            }
-            $typeName = $type->getName();
-            if ($this->isFrameworkInjected($typeName)) {
-                continue;
-            }
-            if ($this->isDerived($typeName)) {
-                if (!$param->isOptional() && !$type->allowsNull()) {
-                    if (($this->derivedResolvers[$typeName])($context) === null) {
-                        foreach ($this->derivedDependencies[$typeName] ?? [] as $depType) {
-                            if (!$context->hasByType($depType)) {
-                                $descriptor = $this->registry->getByType($depType);
-                                $missing[] = $descriptor?->name ?? $depType;
-                            }
-                        }
-                    }
-                }
-                continue;
-            }
-            if (!$param->isOptional() && !$type->allowsNull() && !$context->hasByType($typeName)) {
-                $descriptor = $this->registry->getByType($typeName);
-                $missing[] = $descriptor?->name ?? $typeName;
-            }
-        }
-        return $missing;
-    }
-
-    /**
-     * Collect all registered context-type names required by the tool's execute() — regardless of
-     * whether they are currently present in $context. Used for color-coded help-line badges.
-     *
-     * @return list<string>
-     */
-    private function requiredContextTypes(ToolInterface $tool): array
-    {
-        $required = [];
-        $method = new \ReflectionMethod($tool, 'execute');
-        foreach ($method->getParameters() as $param) {
-            $type = $param->getType();
-            if (!$type instanceof \ReflectionNamedType) {
-                continue;
-            }
-            $typeName = $type->getName();
-            if ($this->isFrameworkInjected($typeName) || $this->isDerived($typeName)) {
-                continue;
-            }
-            if (!$param->isOptional() && !$type->allowsNull()) {
-                $descriptor = $this->registry->getByType($typeName);
-                $required[] = $descriptor?->name ?? $typeName;
-            }
-        }
-        return $required;
-    }
-
-    public function execute(ToolInterface $tool, ToolContext $context, ToolIOInterface $io): ?ToolContext
-    {
-        $args = $this->resolveArgs($tool, $context, $io);
-        return $tool->execute(...$args);
-    }
-
-    private function isFrameworkInjected(string $typeName): bool
-    {
-        return $typeName === ToolIOInterface::class
-            || $typeName === ToolContext::class;
-    }
-
-    private function isDerived(string $typeName): bool
-    {
-        return isset($this->derivedResolvers[$typeName]);
-    }
-
-    private function isAvailable(ToolInterface $tool, ToolContext $context): bool
-    {
-        $method = new \ReflectionMethod($tool, 'execute');
-        foreach ($method->getParameters() as $param) {
-            $type = $param->getType();
-            if (!$type instanceof \ReflectionNamedType) {
-                continue;
-            }
-            $typeName = $type->getName();
-            if ($this->isFrameworkInjected($typeName)) {
-                continue;
-            }
-            if ($this->isDerived($typeName)) {
-                if (!$param->isOptional() && !$type->allowsNull()) {
-                    if (($this->derivedResolvers[$typeName])($context) === null) {
-                        return false;
-                    }
-                }
-                continue;
-            }
-            // Context-typed param: required (non-nullable, non-optional) → tool unavailable if absent
-            if (!$param->isOptional() && !$type->allowsNull()) {
-                if (!$context->hasByType($type->getName())) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    /** @return list<mixed> */
-    private function resolveArgs(ToolInterface $tool, ToolContext $context, ToolIOInterface $io): array
-    {
-        $method = new \ReflectionMethod($tool, 'execute');
-        $args = [];
-        foreach ($method->getParameters() as $param) {
-            $type = $param->getType();
-            if (!$type instanceof \ReflectionNamedType) {
-                $args[] = null;
-                continue;
-            }
-            $typeName = $type->getName();
-            if ($typeName === ToolIOInterface::class) {
-                $args[] = $io;
-                continue;
-            }
-            if ($typeName === ToolContext::class) {
-                $args[] = $context;
-                continue;
-            }
-            if ($this->isDerived($typeName)) {
-                $args[] = ($this->derivedResolvers[$typeName])($context);
-                continue;
-            }
-            $args[] = $context->getByType($typeName);
-        }
-        return $args;
-    }
-
-    private function validateTool(ToolInterface $tool): void
-    {
-        $method = new \ReflectionMethod($tool, 'execute');
-        foreach ($method->getParameters() as $param) {
-            $type = $param->getType();
-            if (!$type instanceof \ReflectionNamedType) {
-                continue;
-            }
-            $typeName = $type->getName();
-            if ($this->isFrameworkInjected($typeName) || $this->isDerived($typeName)) {
-                continue;
-            }
-            if ($this->registry->getByType($typeName) === null) {
-                throw new \LogicException(sprintf(
-                    'Tool %s::execute() parameter $%s has type %s which is neither %s, %s, nor a registered context type.',
-                    $tool::class,
-                    $param->getName(),
-                    $typeName,
-                    ToolIOInterface::class,
-                    ToolContext::class,
-                ));
-            }
-        }
     }
 }

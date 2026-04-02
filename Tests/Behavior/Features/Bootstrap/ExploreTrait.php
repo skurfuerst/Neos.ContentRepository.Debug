@@ -201,6 +201,20 @@ trait ExploreTrait
         Assert::assertTrue($this->sessionExited, 'Expected session to have exited.');
     }
 
+    /**
+     * Fires the bootstrap context-change notification (old = empty, new = current context).
+     * Use this to test {@see \Neos\ContentRepository\Debug\Explore\Tool\WithContextChangeInterface}
+     * behavior at session start — mirrors what {@see ExploreSession::run()} does before the menu loop.
+     *
+     * @When the explore bootstrap notifications run
+     */
+    public function theExploreBootstrapNotificationsRun(): void
+    {
+        $io = new BufferingToolIO();
+        $this->lastToolIO = $io;
+        $this->exploreDispatcher->notifyContextChange(ToolContext::empty(), $this->exploreContext, $io);
+    }
+
     private function runTool(string $toolName, ?BufferingToolIO $io = null): void
     {
         if ($io === null) {
@@ -208,25 +222,35 @@ trait ExploreTrait
         }
         $this->lastToolIO = $io;
 
-        $tool = $this->findToolByShortName($toolName);
-        $result = $this->exploreDispatcher->execute($tool, $this->exploreContext, $io);
+        $toolClass = $this->findToolClassByName($toolName);
+        $oldContext = $this->exploreContext;
+        $result = $this->exploreDispatcher->execute($toolClass, $this->exploreContext, $io);
 
         if ($result === ExploreSession::exit()) {
             $this->sessionExited = true;
         } elseif ($result !== null) {
             $this->exploreContext = $result;
+            // Fire context-change notifications so WithContextChangeInterface tools respond
+            // (uses same $io so their output is captured in lastToolIO)
+            $this->exploreDispatcher->notifyContextChange($oldContext, $this->exploreContext, $io);
         }
     }
 
-    private function findToolByShortName(string $shortName): ToolInterface
+    /**
+     * Finds a tool class by its class basename (e.g. "CrCopyTool" → full class name).
+     * Returns the class name string so the dispatcher can use ToolBuilder for construction.
+     *
+     * @return class-string<ToolInterface>
+     */
+    private function findToolClassByName(string $shortName): string
     {
         $reflectionService = $this->getObject(ReflectionService::class);
         foreach ($reflectionService->getAllImplementationClassNamesForInterface(ToolInterface::class) as $className) {
             $parts = explode('\\', $className);
             if (end($parts) === $shortName) {
-                return $this->getObject($className);
+                return $className;
             }
         }
-        throw new \RuntimeException("No explore tool found with short name '$shortName'.");
+        throw new \RuntimeException("No explore tool found with class name '$shortName'.");
     }
 }

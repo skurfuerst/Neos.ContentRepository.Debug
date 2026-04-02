@@ -10,7 +10,6 @@ use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
-use Neos\Flow\Annotations as Flow;
 
 /**
  * @internal Copies all tables of a CR (events, subscriptions, projections) to a target CR via exact
@@ -19,11 +18,12 @@ use Neos\Flow\Annotations as Flow;
  * Use this to create a safe shadow CR before running {@see EventGraveyardTool}.
  */
 #[ToolMeta(shortName: 'crCopy', group: 'ContentRepository')]
-#[Flow\Scope('singleton')]
 final class CrCopyTool implements ToolInterface
 {
-    #[Flow\Inject]
-    protected Connection $dbal;
+    public function __construct(
+        private readonly Connection $dbal,
+        private readonly ContentRepositoryId $cr,
+    ) {}
 
     public function getMenuLabel(ToolContext $context): string
     {
@@ -38,10 +38,8 @@ final class CrCopyTool implements ToolInterface
      *
      * No Neos/Flow CR layer is involved — this operates purely at the DBAL level.
      */
-    public function execute(
-        ToolIOInterface $io,
-        ContentRepositoryId $cr,
-    ): ?ToolContext {
+    public function execute(ToolIOInterface $io): ?ToolContext
+    {
         $targetId = trim($io->ask('Target CR ID (≤ 16 chars, e.g. "default_shadow"):'));
         if ($targetId === '') {
             $io->writeLine('Aborted.');
@@ -55,13 +53,17 @@ final class CrCopyTool implements ToolInterface
             return null;
         }
 
-        if ($targetCrId->value === $cr->value) {
+        if ($targetCrId->value === $this->cr->value) {
             $io->writeError('Source and target CR are identical — nothing to do.');
             return null;
         }
 
-        // Discover all source tables (no exclusions — exact clone includes graveyard)
-        $srcPrefix = 'cr_' . $cr->value . '_';
+        return $this->doCopy($io, $targetCrId);
+    }
+
+    private function doCopy(ToolIOInterface $io, ContentRepositoryId $targetCrId): ?ToolContext
+    {
+        $srcPrefix = 'cr_' . $this->cr->value . '_';
         /** @var list<string> $srcTables */
         $srcTables = $this->dbal->fetchFirstColumn(
             "SELECT table_name FROM information_schema.tables
@@ -72,11 +74,10 @@ final class CrCopyTool implements ToolInterface
         );
 
         if ($srcTables === []) {
-            $io->writeError('No tables found for source CR "' . $cr->value . '".');
+            $io->writeError('No tables found for source CR "' . $this->cr->value . '".');
             return null;
         }
 
-        // Check if target CR tables already exist
         $dstPrefix = 'cr_' . $targetCrId->value . '_';
         /** @var list<string> $existingDstTables */
         $existingDstTables = $this->dbal->fetchFirstColumn(
@@ -88,7 +89,6 @@ final class CrCopyTool implements ToolInterface
         );
 
         if ($existingDstTables !== []) {
-            // Only prompt for confirmation if the events table is non-empty
             $dstEventsTable = $dstPrefix . 'events';
             $eventsCount = in_array($dstEventsTable, $existingDstTables, strict: true)
                 ? (int)$this->dbal->fetchOne("SELECT COUNT(*) FROM {$dstEventsTable}")
@@ -111,12 +111,11 @@ final class CrCopyTool implements ToolInterface
             }
         }
 
-        // Exact DB-level clone: CREATE TABLE … LIKE + INSERT INTO … SELECT *
         /** @var list<array{src: string, dst: string, rows: int}> $result */
         $result = [];
 
         $io->progress(
-            sprintf('Copying %d table(s) from "%s" to "%s"', count($srcTables), $cr->value, $targetCrId->value),
+            sprintf('Copying %d table(s) from "%s" to "%s"', count($srcTables), $this->cr->value, $targetCrId->value),
             count($srcTables),
             function (callable $advance) use ($srcTables, $srcPrefix, $dstPrefix, &$result): void {
                 foreach ($srcTables as $srcTable) {

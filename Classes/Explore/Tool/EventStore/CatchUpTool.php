@@ -12,7 +12,6 @@ use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
 use Neos\ContentRepository\Debug\InternalServices\EventStoreDebuggingInternalsFactory;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
-use Neos\Flow\Annotations as Flow;
 
 /**
  * @internal Catches up all subscriptions on the selected CR from any state.
@@ -24,29 +23,26 @@ use Neos\Flow\Annotations as Flow;
  * to isolate the bad events first.
  */
 #[ToolMeta(shortName: 'catchUp', group: 'ContentRepository')]
-#[Flow\Scope('singleton')]
 final class CatchUpTool implements ToolInterface
 {
     private const BATCH_SIZE = 1000;
 
-    #[Flow\Inject]
-    protected ContentRepositoryRegistry $crRegistry;
+    public function __construct(
+        private readonly ContentRepositoryRegistry $crRegistry,
+        private readonly ContentRepositoryId $cr,
+    ) {}
 
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Catch-up: boot + catchUp + reactivate all subscriptions';
     }
 
-    public function execute(
-        ToolIOInterface $io,
-        ContentRepositoryId $cr,
-    ): ?ToolContext {
-        $internals = $this->crRegistry->buildService($cr, new EventStoreDebuggingInternalsFactory());
+    public function execute(ToolIOInterface $io): ?ToolContext
+    {
+        $internals = $this->crRegistry->buildService($this->cr, new EventStoreDebuggingInternalsFactory());
 
         $maxSeq = $internals->getMaxSequenceNumber()->value;
 
-        // Read current subscription positions to size the progress bar accurately.
-        // The engine starts from the lowest position across all non-idle subscriptions.
         $minPos = $maxSeq;
         foreach ($internals->subscriptionEngine->subscriptionStatus() as $sub) {
             if (in_array($sub->subscriptionStatus, [
@@ -65,7 +61,7 @@ final class CatchUpTool implements ToolInterface
         $reactivateResult = null;
 
         $io->progress(
-            sprintf('Catching up "%s" (~%d events)', $cr->value, $eventsToProcess),
+            sprintf('Catching up "%s" (~%d events)', $this->cr->value, $eventsToProcess),
             $eventsToProcess,
             function (callable $advance) use ($internals, &$bootResult, &$catchUpResult, &$reactivateResult): void {
                 $bootResult = $internals->subscriptionEngine->boot(
@@ -98,7 +94,7 @@ final class CatchUpTool implements ToolInterface
                 ]);
             }
         } else {
-            $io->writeInfo('All subscriptions active on "' . $cr->value . '".');
+            $io->writeInfo('All subscriptions active on "' . $this->cr->value . '".');
         }
 
         return null;

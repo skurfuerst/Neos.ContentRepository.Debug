@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Neos\ContentRepository\Debug\Tests\Unit\Explore\IO;
 
 use Neos\ContentRepository\Debug\Explore\IO\ToolSelectionPrompt;
+use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
+use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
 use Neos\ContentRepository\Debug\Explore\ToolMenu;
 use Neos\ContentRepository\Debug\Explore\ToolMenuItem;
@@ -295,11 +297,8 @@ class ToolSelectionPromptTest extends TestCase
      */
     private function makeMenu(array $items, string $group = 'Group'): ToolMenu
     {
-        $stub = $this->createStub(ToolInterface::class);
-        $stub->method('getMenuLabel')->willReturn('label');
-
         return new ToolMenu(array_map(
-            fn(array $i) => new ToolMenuItem($i[0], $i[1], $group, $i[2] ?? true, $stub),
+            fn(array $i) => new ToolMenuItem($i[0], $i[1], $group, $i[2] ?? true, PromptTestFakeTool::class),
             $items,
         ));
     }
@@ -309,12 +308,17 @@ class ToolSelectionPromptTest extends TestCase
      */
     private function makeMultiGroupMenu(array $items): ToolMenu
     {
-        $stub = $this->createStub(ToolInterface::class);
-        $stub->method('getMenuLabel')->willReturn('label');
-
         return new ToolMenu(array_map(
-            fn(array $i) => new ToolMenuItem($i[0], $i[1], $i[2], $i[3] ?? true, $stub),
+            fn(array $i) => new ToolMenuItem($i[0], $i[1], $i[2], $i[3] ?? true, PromptTestFakeTool::class),
             $items,
         ));
     }
+}
+
+// Minimal ToolInterface stub used as a class-string placeholder in ToolMenuItem construction.
+#[ToolMeta(shortName: 'prompt-fake', group: 'Test')]
+final class PromptTestFakeTool implements ToolInterface
+{
+    public function getMenuLabel(ToolContext $context): string { return 'fake'; }
+    public function execute(ToolIOInterface $io): ?ToolContext { return null; }
 }

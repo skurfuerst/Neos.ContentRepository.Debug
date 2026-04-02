@@ -18,14 +18,19 @@ use Neos\ContentRepository\Debug\Explore\ToolContext;
 #[ToolMeta(shortName: 'wsId', group: 'Workspace')]
 final class ChooseWorkspaceTool implements ToolInterface
 {
+    public function __construct(
+        private readonly ToolContext $context,
+        private readonly ContentRepository $cr,
+    ) {}
+
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Choose workspace';
     }
 
-    public function execute(ToolIOInterface $io, ToolContext $context, ContentRepository $cr): ?ToolContext
+    public function execute(ToolIOInterface $io): ?ToolContext
     {
-        $workspaces = $cr->findWorkspaces();
+        $workspaces = $this->cr->findWorkspaces();
 
         $rows = [];
         foreach ($workspaces as $workspace) {
@@ -42,6 +47,6 @@ final class ChooseWorkspaceTool implements ToolInterface
         $selected = $io->chooseFromTable('Choose workspace', ['Workspace'], $rows);
         $io->writeInfo(sprintf('✔ Workspace set to: %s', $selected));
 
-        return $context->withFromString('workspace', $selected);
+        return $this->context->withFromString('workspace', $selected);
     }
 }

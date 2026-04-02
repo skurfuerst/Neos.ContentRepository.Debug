@@ -21,14 +21,19 @@ use Neos\ContentRepository\Debug\Explore\ToolContext;
 #[ToolMeta(shortName: 'types', group: 'Other')]
 final class NodeTypeExplorerTool implements ToolInterface
 {
+    public function __construct(
+        private readonly ToolContext $context,
+        private readonly ContentGraphInterface $contentGraph,
+    ) {}
+
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Explore node types';
     }
 
-    public function execute(ToolIOInterface $io, ToolContext $context, ContentGraphInterface $contentGraph): ?ToolContext
+    public function execute(ToolIOInterface $io): ?ToolContext
     {
-        $nodeTypeNames = $contentGraph->findUsedNodeTypeNames();
+        $nodeTypeNames = $this->contentGraph->findUsedNodeTypeNames();
 
         $typeRows = [];
         foreach ($nodeTypeNames as $nodeTypeName) {
@@ -43,7 +48,7 @@ final class NodeTypeExplorerTool implements ToolInterface
         ksort($typeRows);
         $selectedType = $io->chooseFromTable('Choose node type', ['Node Type'], $typeRows);
 
-        $aggregates = $contentGraph->findNodeAggregatesByType(NodeTypeName::fromString($selectedType));
+        $aggregates = $this->contentGraph->findNodeAggregatesByType(NodeTypeName::fromString($selectedType));
 
         $tableRows = ['_stay' => ['(stay here)', '', '']];
         foreach ($aggregates as $aggregate) {
@@ -62,6 +67,6 @@ final class NodeTypeExplorerTool implements ToolInterface
         }
 
         $io->writeInfo(sprintf('✔ Node set to: %s', $selected));
-        return $context->with('node', NodeAggregateId::fromString($selected));
+        return $this->context->with('node', NodeAggregateId::fromString($selected));
     }
 }

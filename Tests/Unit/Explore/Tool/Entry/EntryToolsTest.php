@@ -29,10 +29,11 @@ class EntryToolsTest extends TestCase
 
     public function test_set_node_asks_for_uuid_and_sets_node_in_context(): void
     {
-        $tool = new SetNodeByUuidTool();
+        $ctx = ToolContext::create($this->registry);
+        $tool = new SetNodeByUuidTool($ctx);
         $io = new AskingToolIO('abc-123');
 
-        $result = $tool->execute($io, ToolContext::create($this->registry));
+        $result = $tool->execute($io);
 
         self::assertNotNull($result);
         $node = $result->get('node');
@@ -42,11 +43,11 @@ class EntryToolsTest extends TestCase
 
     public function test_set_node_preserves_existing_context_slots(): void
     {
-        $tool = new SetNodeByUuidTool();
-        $io = new AskingToolIO('new-uuid');
         $ctx = ToolContext::create($this->registry)->with('other', new \stdClass());
+        $tool = new SetNodeByUuidTool($ctx);
+        $io = new AskingToolIO('new-uuid');
 
-        $result = $tool->execute($io, $ctx);
+        $result = $tool->execute($io);
 
         self::assertNotNull($result);
         self::assertTrue($result->has('other'));
@@ -76,4 +77,5 @@ final class AskingToolIO implements ToolIOInterface
     public function progress(string $label, int $total, \Closure $callback): void { $callback(static function(): void {}); }
     public function chooseMultiple(string $question, array $choices, array $default = []): array { return $default; }
     public function chooseFromMenu(ToolMenu $menu): string { return $menu->available()[0]->shortName ?? ''; }
+    public function task(string $label, \Closure $callback): void { $callback(); }
 }

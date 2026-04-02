@@ -32,29 +32,31 @@ use Neos\Neos\FrontendRouting\Projection\DocumentUriPathFinder;
 #[ToolMeta(shortName: 'n', group: 'Nodes')]
 final class NodeInfoTool implements AutoRunToolInterface
 {
+    public function __construct(
+        private readonly ContentRepository $cr,
+        private readonly NodeAggregateId $node,
+        private readonly ?ContentGraphInterface $contentGraph = null,
+        private readonly ?ContentSubgraphInterface $subgraph = null,
+        private readonly ?DimensionSpacePoint $dsp = null,
+    ) {}
+
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Node info';
     }
 
-    public function execute(
-        ToolIOInterface $io,
-        ContentRepository $cr,
-        NodeAggregateId $node,
-        ?ContentGraphInterface $contentGraph = null,
-        ?ContentSubgraphInterface $subgraph = null,
-        ?DimensionSpacePoint $dsp = null,
-    ): ?ToolContext {
+    public function execute(ToolIOInterface $io): ?ToolContext
+    {
         // ── Identity + dimension coverage (requires a workspace in context) ───
 
-        if ($contentGraph !== null) {
-            $aggregate = $contentGraph->findNodeAggregateById($node);
+        if ($this->contentGraph !== null) {
+            $aggregate = $this->contentGraph->findNodeAggregateById($this->node);
             if ($aggregate === null) {
-                $io->writeError(sprintf('Node aggregate "%s" not found.', $node->value));
+                $io->writeError(sprintf('Node aggregate "%s" not found.', $this->node->value));
                 return null;
             }
 
-            $parents = $contentGraph->findParentNodeAggregates($node);
+            $parents = $this->contentGraph->findParentNodeAggregates($this->node);
             $parentInfo = [];
             foreach ($parents as $parent) {
                 $parentInfo[] = sprintf('%s (%s)', $parent->nodeAggregateId->value, $parent->nodeTypeName->value);
@@ -68,13 +70,13 @@ final class NodeInfoTool implements AutoRunToolInterface
                 'Parents'        => $parentInfo !== [] ? implode(', ', $parentInfo) : '(root)',
             ];
 
-            if ($subgraph !== null) {
-                $foundNode = $subgraph->findNodeById($node);
+            if ($this->subgraph !== null) {
+                $foundNode = $this->subgraph->findNodeById($this->node);
                 if ($foundNode !== null) {
                     $pairs['Properties']     = (string) iterator_count($foundNode->properties->serialized());
-                    $pairs['Children']       = (string) $subgraph->countChildNodes($node, CountChildNodesFilter::create());
-                    $pairs['References out'] = (string) $subgraph->countReferences($node, CountReferencesFilter::create());
-                    $pairs['References in']  = (string) $subgraph->countBackReferences($node, CountBackReferencesFilter::create());
+                    $pairs['Children']       = (string) $this->subgraph->countChildNodes($this->node, CountChildNodesFilter::create());
+                    $pairs['References out'] = (string) $this->subgraph->countReferences($this->node, CountReferencesFilter::create());
+                    $pairs['References in']  = (string) $this->subgraph->countBackReferences($this->node, CountBackReferencesFilter::create());
 
                     $ts = $foundNode->timestamps;
                     $pairs['Created']       = $ts->originalCreated->format('Y-m-d H:i:s');
@@ -83,10 +85,10 @@ final class NodeInfoTool implements AutoRunToolInterface
             }
 
             // ── Location context (URI path, enclosing document) ─────────────────
-            if ($subgraph !== null && $dsp !== null) {
-                $foundNode ??= $subgraph->findNodeById($node);
+            if ($this->subgraph !== null && $this->dsp !== null) {
+                $foundNode ??= $this->subgraph->findNodeById($this->node);
                 if ($foundNode !== null) {
-                    $this->addLocationContext($pairs, $cr, $subgraph, $foundNode, $dsp);
+                    $this->addLocationContext($pairs, $this->cr, $this->subgraph, $foundNode, $this->dsp);
                 }
             }
 

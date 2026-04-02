@@ -11,7 +11,6 @@ use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
-use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Domain\Model\SiteNodeName;
 use Neos\Neos\Domain\Repository\SiteRepository;
 use Neos\Neos\FrontendRouting\Projection\DocumentUriPathFinder;
@@ -25,18 +24,22 @@ use Neos\Neos\FrontendRouting\Projection\DocumentUriPathFinder;
 #[ToolMeta(shortName: 'path', group: 'Other')]
 final class FindNodeByPathTool implements ToolInterface
 {
-    #[Flow\Inject]
-    protected SiteRepository $siteRepository;
+    public function __construct(
+        private readonly SiteRepository $siteRepository,
+        private readonly ToolContext $context,
+        private readonly ContentRepository $cr,
+        private readonly DimensionSpacePoint $dsp,
+    ) {}
 
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Find node by URL path';
     }
 
-    public function execute(ToolIOInterface $io, ToolContext $context, ContentRepository $cr, DimensionSpacePoint $dsp): ?ToolContext
+    public function execute(ToolIOInterface $io): ?ToolContext
     {
         try {
-            $finder = $cr->projectionState(DocumentUriPathFinder::class);
+            $finder = $this->cr->projectionState(DocumentUriPathFinder::class);
         } catch (\Throwable) {
             $io->writeError('DocumentUriPathFinder projection not available in this content repository.');
             return null;
@@ -55,7 +58,7 @@ final class FindNodeByPathTool implements ToolInterface
             $docInfo = $finder->getEnabledBySiteNodeNameUriPathAndDimensionSpacePointHash(
                 $siteNodeName,
                 $uriPath,
-                $dsp->hash,
+                $this->dsp->hash,
             );
         } catch (\Throwable) {
             $io->writeError(sprintf('No node found for path "/%s" in this dimension.', $uriPath));
@@ -69,7 +72,7 @@ final class FindNodeByPathTool implements ToolInterface
         ]);
 
         $io->writeInfo(sprintf('✔ Node set to: %s', $docInfo->getNodeAggregateId()->value));
-        return $context->with('node', $docInfo->getNodeAggregateId());
+        return $this->context->with('node', $docInfo->getNodeAggregateId());
     }
 
     private function resolveSiteNodeName(ToolIOInterface $io): ?SiteNodeName

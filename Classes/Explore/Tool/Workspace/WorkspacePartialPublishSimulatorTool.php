@@ -14,7 +14,6 @@ use Neos\ContentRepository\Core\Feature\RebaseableCommand;
 use Neos\ContentRepository\Core\Feature\RebaseableCommands;
 use Neos\ContentRepository\Core\Feature\WorkspaceCommandHandler;
 use Neos\ContentRepository\Core\Feature\WorkspaceRebase\ConflictingEvent;
-use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeAggregateIds;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
@@ -23,7 +22,6 @@ use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
 use Neos\EventStore\EventStoreInterface;
 use Neos\EventStore\Model\Event\SequenceNumber;
-use Neos\Flow\Annotations as Flow;
 use Neos\Utility\ObjectAccess;
 
 /**
@@ -34,9 +32,14 @@ use Neos\Utility\ObjectAccess;
  * @see WorkspaceCommandHandler::handlePublishIndividualNodesFromWorkspace for the production logic this mirrors
  */
 #[ToolMeta(shortName: 'simPartialPublish', group: 'Workspace')]
-#[Flow\Scope('singleton')]
 final class WorkspacePartialPublishSimulatorTool implements ToolInterface
 {
+    public function __construct(
+        private readonly WorkspaceName $workspace,
+        private readonly ContentRepository $contentRepository,
+        private readonly EventStoreInterface $eventStore,
+    ) {}
+
     public function getMenuLabel(ToolContext $context): string
     {
         if ($context->getByType(WorkspaceName::class) === null) {
@@ -45,15 +48,10 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
         return 'Workspace: simulate partial publish';
     }
 
-    public function execute(
-        ToolIOInterface $io,
-        ContentRepositoryId $cr,
-        WorkspaceName $workspace,
-        ContentRepository $contentRepository,
-        EventStoreInterface $eventStore,
-    ): ?ToolContext {
+    public function execute(ToolIOInterface $io): ?ToolContext
+    {
         // --- Step 1: Extract CommandSimulatorFactory from production wiring via reflection ---
-        $commandBus = ObjectAccess::getProperty($contentRepository, 'commandBus', forceDirectAccess: true);
+        $commandBus = ObjectAccess::getProperty($this->contentRepository, 'commandBus', forceDirectAccess: true);
         $handlers = ObjectAccess::getProperty($commandBus, 'handlers', forceDirectAccess: true);
         $commandSimulatorFactory = null;
         foreach ($handlers as $handler) {
@@ -68,17 +66,17 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
         }
 
         // --- Step 2: Load rebaseable commands from workspace event stream ---
-        $ws = $contentRepository->findWorkspaceByName($workspace);
+        $ws = $this->contentRepository->findWorkspaceByName($this->workspace);
         if ($ws === null) {
-            $io->writeError(sprintf('Workspace "%s" not found.', $workspace->value));
+            $io->writeError(sprintf('Workspace "%s" not found.', $this->workspace->value));
             return null;
         }
         if ($ws->baseWorkspaceName === null) {
-            $io->writeError(sprintf('"%s" is a root workspace (no base workspace). Partial publish is not applicable.', $workspace->value));
+            $io->writeError(sprintf('"%s" is a root workspace (no base workspace). Partial publish is not applicable.', $this->workspace->value));
             return null;
         }
 
-        $stream = $eventStore->load(
+        $stream = $this->eventStore->load(
             ContentStreamEventStreamName::fromContentStreamId($ws->currentContentStreamId)
                 ->getEventStreamName()
         );
@@ -90,7 +88,7 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
         }
 
         // --- Step 3: Display all commands ---
-        $io->writeNote(sprintf('Rebaseable commands in workspace "%s"', $workspace->value));
+        $io->writeNote(sprintf('Rebaseable commands in workspace "%s"', $this->workspace->value));
         $io->writeTable(
             ['Seq#', 'Command', 'Node aggregate ID', 'Node type'],
             array_map(
@@ -173,7 +171,7 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
         }
 
         // --- Step 6: Run simulation ---
-        $baseWorkspace = $contentRepository->findWorkspaceByName($ws->baseWorkspaceName);
+        $baseWorkspace = $this->contentRepository->findWorkspaceByName($ws->baseWorkspaceName);
         if ($baseWorkspace === null) {
             $io->writeError(sprintf('Base workspace "%s" not found.', $ws->baseWorkspaceName->value));
             return null;
@@ -244,8 +242,6 @@ final class WorkspacePartialPublishSimulatorTool implements ToolInterface
                 $io->writeKeyValue($this->formatException($conflict->getException()));
             }
         }
-
-        $matchingCount = iterator_count($matchingCommands->getIterator());
 
         if (!$highestSeqForMatching->equals(SequenceNumber::none())) {
             $io->writeLine('');

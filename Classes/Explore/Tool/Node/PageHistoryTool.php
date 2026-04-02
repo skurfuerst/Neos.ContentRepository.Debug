@@ -15,7 +15,6 @@ use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
 use Neos\ContentRepositoryRegistry\Factory\EventStore\DoctrineEventStoreFactory;
-use Neos\Flow\Annotations as Flow;
 
 /**
  * @internal Shows combined event history for a page and all its content nodes.
@@ -26,23 +25,23 @@ use Neos\Flow\Annotations as Flow;
 #[ToolMeta(shortName: 'docHist', group: 'Events')]
 final class PageHistoryTool implements ToolInterface
 {
-    #[Flow\Inject]
-    protected Connection $connection;
+    public function __construct(
+        private readonly Connection $connection,
+        private readonly ContentRepositoryId $cr,
+        private readonly ContentSubgraphInterface $subgraph,
+        private readonly NodeAggregateId $node,
+    ) {}
 
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Page: full event history';
     }
 
-    public function execute(
-        ToolIOInterface $io,
-        ContentRepositoryId $cr,
-        ContentSubgraphInterface $subgraph,
-        NodeAggregateId $node,
-    ): ?ToolContext {
+    public function execute(ToolIOInterface $io): ?ToolContext
+    {
         // Collect all node IDs on this page (the page itself + all content descendants)
         // Include the page node itself but exclude document descendants (subpages)
-        $subtree = $subgraph->findSubtree($node, FindSubtreeFilter::create(nodeTypes: '!Neos.Neos:Document'));
+        $subtree = $this->subgraph->findSubtree($this->node, FindSubtreeFilter::create(nodeTypes: '!Neos.Neos:Document'));
         if ($subtree === null) {
             $io->writeError('Node not found in this subgraph.');
             return null;
@@ -53,7 +52,7 @@ final class PageHistoryTool implements ToolInterface
 
         $io->writeNote(sprintf('Querying events for %d nodes on this page...', count($nodeIds)));
 
-        $tableName = DoctrineEventStoreFactory::databaseTableName($cr);
+        $tableName = DoctrineEventStoreFactory::databaseTableName($this->cr);
 
         // Build query with IN clause for all node IDs using JSON_EXTRACT
         $qb = $this->connection->createQueryBuilder();

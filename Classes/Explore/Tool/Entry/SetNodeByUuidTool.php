@@ -15,18 +15,22 @@ use Neos\ContentRepository\Debug\Explore\ToolContext;
 #[ToolMeta(shortName: 'nId', group: 'Nodes')]
 final class SetNodeByUuidTool implements ToolInterface
 {
+    public function __construct(
+        private readonly ToolContext $context,
+    ) {}
+
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Set node by UUID';
     }
 
-    public function execute(ToolIOInterface $io, ToolContext $context): ?ToolContext
+    public function execute(ToolIOInterface $io): ?ToolContext
     {
         $uuid = trim($io->ask('Enter node UUID:'));
         if ($uuid === '') {
             return null;
         }
         $io->writeInfo(sprintf('✔ Node set to: %s', $uuid));
-        return $context->withFromString('node', $uuid);
+        return $this->context->withFromString('node', $uuid);
     }
 }

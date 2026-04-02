@@ -6,6 +6,7 @@ namespace Neos\ContentRepository\Debug\Explore;
 
 use Neos\ContentRepository\Debug\Explore\IO\ToolSelectionPrompt;
 use Neos\ContentRepository\Debug\Explore\Tool\AutoRunToolInterface;
+use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\Flow\Annotations as Flow;
 
 /**
@@ -38,7 +39,7 @@ final class ToolMenu
     {
         return array_values(array_filter(
             $this->items,
-            fn(ToolMenuItem $item) => $item->available && $item->tool instanceof AutoRunToolInterface,
+            fn(ToolMenuItem $item) => $item->available && is_a($item->toolClass, AutoRunToolInterface::class, true),
         ));
     }
 

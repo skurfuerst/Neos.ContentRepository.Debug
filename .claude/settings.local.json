@@ -5,7 +5,12 @@
       "Bash(mise run:*)",
       "mcp__neos__dimension_list_dimensions",
       "mcp__neos__document_list_documents",
-      "mcp__neos__debug_explore"
+      "mcp__neos__debug_explore",
+      "Bash(find /Users/sebastian/src/stesad/energielotse -path */ContentRepository/Core/SharedModel/ContentRepository/ContentRepositoryId.php)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(docker compose:*)",
+      "Bash(grep -v \"^$\")",
+      "Bash(echo \"Exit: $?\")"
     ]
   },
   "sandbox": {

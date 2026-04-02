@@ -13,7 +13,6 @@ use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
-use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Domain\NodeLabel\NodeLabelGeneratorInterface;
 
 /**
@@ -25,22 +24,22 @@ use Neos\Neos\Domain\NodeLabel\NodeLabelGeneratorInterface;
 #[ToolMeta(shortName: 'nRefs', group: 'Nodes')]
 final class NodeReferencesTool implements ToolInterface
 {
-    #[Flow\Inject]
-    protected NodeLabelGeneratorInterface $nodeLabelGenerator;
+    public function __construct(
+        private readonly NodeLabelGeneratorInterface $nodeLabelGenerator,
+        private readonly ToolContext $context,
+        private readonly ContentSubgraphInterface $subgraph,
+        private readonly NodeAggregateId $node,
+    ) {}
 
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Node: references';
     }
 
-    public function execute(
-        ToolIOInterface $io,
-        ToolContext $context,
-        ContentSubgraphInterface $subgraph,
-        NodeAggregateId $node,
-    ): ?ToolContext {
-        $outgoing = $subgraph->findReferences($node, FindReferencesFilter::create());
-        $incoming = $subgraph->findBackReferences($node, FindBackReferencesFilter::create());
+    public function execute(ToolIOInterface $io): ?ToolContext
+    {
+        $outgoing = $this->subgraph->findReferences($this->node, FindReferencesFilter::create());
+        $incoming = $this->subgraph->findBackReferences($this->node, FindBackReferencesFilter::create());
 
         if (count($outgoing) === 0 && count($incoming) === 0) {
             $io->writeLine('No references.');
@@ -77,7 +76,7 @@ final class NodeReferencesTool implements ToolInterface
         }
 
         $io->writeInfo(sprintf('✔ Node set to: %s', $selected));
-        return $context->with('node', NodeAggregateId::fromString($selected));
+        return $this->context->with('node', NodeAggregateId::fromString($selected));
     }
 
     private function nodeLabel(Node $node): string

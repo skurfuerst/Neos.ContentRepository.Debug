@@ -58,6 +58,15 @@ final class DynamicContentRepositoryRegistrar
     }
 
     /**
+     * Returns true for CRs registered at runtime via {@see register()} (DB copies, not Flow settings).
+     * Complement of {@see isRegistered()} — use this to check "was this already dynamically set up?".
+     */
+    public function isDynamicallyRegistered(ContentRepositoryId $id): bool
+    {
+        return isset($this->dynamicIds[$id->value]);
+    }
+
+    /**
      * Returns true only for CRs configured in Flow settings.
      * Dynamically registered shadow CRs (added via {@see register()}) return false —
      * they are debug copies, not production CRs.

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Neos\ContentRepository\Debug\Explore\Tool\EventStore;
 
 use Doctrine\DBAL\Connection;
-use Neos\ContentRepository\Core\EventStore\InitiatingEventMetadata;
 use Neos\ContentRepository\Core\Feature\NodeModification\Command\SetSerializedNodeProperties;
 use Neos\ContentRepository\Core\Feature\NodeModification\Event\NodePropertiesWereSet;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
@@ -19,7 +18,6 @@ use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\ContentRepositoryRegistry\Factory\EventStore\DoctrineEventStoreFactory;
 use Neos\EventStore\Model\EventEnvelope;
 use Neos\EventStore\Model\EventStream\VirtualStreamName;
-use Neos\Flow\Annotations as Flow;
 
 /**
  * @internal Folds consecutive NodePropertiesWereSet streaks into a single event per node, reducing
@@ -75,45 +73,40 @@ use Neos\Flow\Annotations as Flow;
  * @see EventGraveyardTool for a similar raw-DB mutation pattern
  */
 #[ToolMeta(shortName: 'compactEvents', group: 'Events')]
-#[Flow\Scope('singleton')]
 final class CompactEventsTool implements ToolInterface
 {
-    #[Flow\Inject]
-    protected ContentRepositoryRegistry $crRegistry;
-
-    #[Flow\Inject]
-    protected Connection $dbal;
-
-    #[Flow\Inject]
-    protected DynamicContentRepositoryRegistrar $registrar;
+    public function __construct(
+        private readonly ContentRepositoryRegistry $crRegistry,
+        private readonly Connection $dbal,
+        private readonly DynamicContentRepositoryRegistrar $registrar,
+        private readonly ContentRepositoryId $cr,
+    ) {}
 
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Compact events: merge property-edit duplicates within live streams (⚠ modifies event store)';
     }
 
-    public function execute(
-        ToolIOInterface $io,
-        ContentRepositoryId $cr,
-    ): ?ToolContext {
+    public function execute(ToolIOInterface $io): ?ToolContext
+    {
         // --- Step 1: Warn if targeting a production CR (informational only — single confirm below) ---
-        if ($this->registrar->isRegistered($cr)) {
+        if ($this->registrar->isRegistered($this->cr)) {
             $io->writeNote(sprintf(
                 'Warning: "%s" is a production CR registered in Flow settings.',
-                $cr->value
+                $this->cr->value
             ));
             $io->writeLine('Run crCopy first to create a shadow CR and run compaction there.');
         }
 
         // --- Step 2: Confirm compaction ---
-        if (!$io->confirm(sprintf('Compact NodePropertiesWereSet streaks in CR "%s"? (⚠ modifies event store)', $cr->value))) {
+        if (!$io->confirm(sprintf('Compact NodePropertiesWereSet streaks in CR "%s"? (⚠ modifies event store)', $this->cr->value))) {
             $io->writeLine('Aborted.');
             return null;
         }
 
         // --- Step 3: Prepare internals (events are streamed below, not buffered) ---
-        $internals = $this->crRegistry->buildService($cr, new EventStoreDebuggingInternalsFactory());
-        $eventsTable = DoctrineEventStoreFactory::databaseTableName($cr);
+        $internals = $this->crRegistry->buildService($this->cr, new EventStoreDebuggingInternalsFactory());
+        $eventsTable = DoctrineEventStoreFactory::databaseTableName($this->cr);
         $totalEvents = (int)$this->dbal->fetchOne("SELECT COUNT(*) FROM {$eventsTable}");
         $deletedCount = 0;
         $groupCount = 0;
@@ -204,7 +197,7 @@ final class CompactEventsTool implements ToolInterface
         };
 
         $io->progress(
-            sprintf('Scanning %d event(s) in CR "%s" …', $totalEvents, $cr->value),
+            sprintf('Scanning %d event(s) in CR "%s" …', $totalEvents, $this->cr->value),
             $totalEvents,
             function (callable $advance) use ($internals, $commandClassOf, &$pendingGroups, $compactGroup, $flushStreak): void {
                 foreach ($internals->eventStore->load(VirtualStreamName::all()) as $envelope) {
@@ -235,7 +228,7 @@ final class CompactEventsTool implements ToolInterface
 
         // --- Step 6: Statistics ---
         if ($deletedCount === 0) {
-            $io->writeInfo(sprintf('Nothing to compact in CR "%s".', $cr->value));
+            $io->writeInfo(sprintf('Nothing to compact in CR "%s".', $this->cr->value));
             return null;
         }
 
@@ -243,7 +236,7 @@ final class CompactEventsTool implements ToolInterface
             'Compacted %d group(s), deleted %d event(s) from CR "%s".',
             $groupCount,
             $deletedCount,
-            $cr->value
+            $this->cr->value
         ));
         $io->writeNote('Projections are now out of sync. Run "resetProjections" then "catchUp", or: ./flow subscription:replayAll');
 

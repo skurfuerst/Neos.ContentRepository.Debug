@@ -12,7 +12,6 @@ use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
-use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Domain\NodeLabel\NodeLabelGeneratorInterface;
 
 /**
@@ -23,17 +22,21 @@ use Neos\Neos\Domain\NodeLabel\NodeLabelGeneratorInterface;
 #[ToolMeta(shortName: 'cn', group: 'Nodes')]
 final class ChildNodesTool implements ToolInterface
 {
-    #[Flow\Inject]
-    protected NodeLabelGeneratorInterface $nodeLabelGenerator;
+    public function __construct(
+        private readonly NodeLabelGeneratorInterface $nodeLabelGenerator,
+        private readonly ToolContext $context,
+        private readonly ContentSubgraphInterface $subgraph,
+        private readonly NodeAggregateId $node,
+    ) {}
 
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Node: children';
     }
 
-    public function execute(ToolIOInterface $io, ToolContext $context, ContentSubgraphInterface $subgraph, NodeAggregateId $node): ?ToolContext
+    public function execute(ToolIOInterface $io): ?ToolContext
     {
-        $children = $subgraph->findChildNodes($node, FindChildNodesFilter::create());
+        $children = $this->subgraph->findChildNodes($this->node, FindChildNodesFilter::create());
 
         if ($children->count() === 0) {
             $io->writeLine('No child nodes.');
@@ -52,7 +55,7 @@ final class ChildNodesTool implements ToolInterface
         }
 
         $io->writeInfo(sprintf('✔ Node set to: %s', $selected));
-        return $context->with('node', NodeAggregateId::fromString($selected));
+        return $this->context->with('node', NodeAggregateId::fromString($selected));
     }
 
     private function nodeLabel(Node $node): string

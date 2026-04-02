@@ -5,63 +5,71 @@ declare(strict_types=1);
 namespace Neos\ContentRepository\Debug\Tests\Unit\Explore;
 
 use Neos\ContentRepository\Debug\Explore\ExploreSession;
+use Neos\ContentRepository\Debug\Explore\ToolBuilder;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
 use Neos\ContentRepository\Debug\Explore\ToolContextRegistry;
 use Neos\ContentRepository\Debug\Explore\ToolDispatcher;
 use Neos\ContentRepository\Debug\Explore\ToolMenu;
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
+use Neos\Flow\ObjectManagement\ObjectManagerInterface;
+use Neos\Flow\Reflection\ReflectionService;
 use PHPUnit\Framework\TestCase;
 
 class ExploreSessionTest extends TestCase
 {
     private ToolContextRegistry $registry;
+    private ToolBuilder $builder;
 
     protected function setUp(): void
     {
         $this->registry = new ToolContextRegistry();
+        $this->registry->register(
+            name: 'counter',
+            type: SessionFakeCounter::class,
+            alias: 'c',
+            fromString: fn(string $s) => new SessionFakeCounter((int)$s),
+            toString: fn(SessionFakeCounter $v) => (string)$v->value,
+        );
+        $this->builder = $this->makeBuilder($this->registry);
     }
 
     public function test_session_exits_when_exit_tool_is_selected(): void
     {
-        $exitTool = new FakeExitTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$exitTool]);
-        $io = new ScriptedToolIO(['0']); // pick first (and only) tool
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [SessionFakeExitTool::class]);
+        $io = new SessionScriptedToolIO(['session-exit']); // pick by short name
 
         $session = new ExploreSession($dispatcher);
         $session->run(ToolContext::empty(), $io);
 
-        self::assertTrue($exitTool->wasExecuted);
+        self::assertSame(1, SessionFakeExitTool::$executionCount);
     }
 
     public function test_session_updates_context_and_loops(): void
     {
-        $registry = new ToolContextRegistry();
-        $registry->register(
-            name: 'counter',
-            type: FakeCounter::class,
-            alias: 'c',
-            fromString: fn(string $s) => new FakeCounter((int)$s),
-            toString: fn(FakeCounter $v) => (string)$v->value,
-        );
-        $incrementTool = new FakeIncrementTool();
-        $exitTool = new FakeExitTool();
-        $dispatcher = new ToolDispatcher($registry, [$incrementTool, $exitTool]);
-        // first pick: tool 0 (increment), second pick: tool 1 (exit)
-        $io = new ScriptedToolIO(['0', '1']);
+        SessionFakeExitTool::$executionCount = 0;
+        SessionFakeIncrementTool::$executionCount = 0;
+
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [
+            SessionFakeIncrementTool::class,
+            SessionFakeExitTool::class,
+        ]);
+        // first pick: increment, second pick: exit
+        $io = new SessionScriptedToolIO(['session-increment', 'session-exit']);
 
         $session = new ExploreSession($dispatcher);
-        $session->run(ToolContext::empty()->with('counter', new FakeCounter(0)), $io);
+        $session->run(ToolContext::empty()->with('counter', new SessionFakeCounter(0)), $io);
 
-        self::assertSame(1, $incrementTool->executionCount);
-        self::assertTrue($exitTool->wasExecuted);
+        self::assertSame(1, SessionFakeIncrementTool::$executionCount);
+        self::assertSame(1, SessionFakeExitTool::$executionCount);
     }
 
     public function test_session_renders_menu_labels(): void
     {
-        $exitTool = new FakeExitTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$exitTool]);
-        $io = new ScriptedToolIO(['0']);
+        SessionFakeExitTool::$executionCount = 0;
+
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [SessionFakeExitTool::class]);
+        $io = new SessionScriptedToolIO(['session-exit']);
 
         $session = new ExploreSession($dispatcher);
         $session->run(ToolContext::empty(), $io);
@@ -71,9 +79,10 @@ class ExploreSessionTest extends TestCase
 
     public function test_session_calls_context_renderer_before_each_menu(): void
     {
-        $exitTool = new FakeExitTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$exitTool]);
-        $io = new ScriptedToolIO(['0']);
+        SessionFakeExitTool::$executionCount = 0;
+
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [SessionFakeExitTool::class]);
+        $io = new SessionScriptedToolIO(['session-exit']);
 
         $renderCount = 0;
         $session = new ExploreSession($dispatcher, function (ToolContext $ctx) use (&$renderCount): string {
@@ -84,38 +93,55 @@ class ExploreSessionTest extends TestCase
 
         self::assertSame(1, $renderCount);
     }
+
+    // --- Helpers ---
+
+    private function makeBuilder(ToolContextRegistry $registry): ToolBuilder
+    {
+        $reflectionService = $this->createStub(ReflectionService::class);
+        $reflectionService->method('getMethodParameters')->willReturn([]);
+
+        $objectManager = $this->createStub(ObjectManagerInterface::class);
+        $objectManager->method('get')->willThrowException(new \RuntimeException('ObjectManager not available in unit tests'));
+
+        return new ToolBuilder($registry, $objectManager, $reflectionService);
+    }
 }
 
 // --- Fakes ---
 
-final class FakeCounter
+final class SessionFakeCounter
 {
     public function __construct(public readonly int $value) {}
 }
 
-final class FakeExitTool implements ToolInterface
+#[\Neos\ContentRepository\Debug\Explore\Tool\ToolMeta(shortName: 'session-exit', group: 'Test')]
+final class SessionFakeExitTool implements ToolInterface
 {
-    public bool $wasExecuted = false;
+    public static int $executionCount = 0;
+    public function __construct() {}
     public function getMenuLabel(ToolContext $context): string { return 'Exit'; }
     public function execute(ToolIOInterface $io): ?ToolContext
     {
-        $this->wasExecuted = true;
+        self::$executionCount++;
         return ExploreSession::exit();
     }
 }
 
-final class FakeIncrementTool implements ToolInterface
+#[\Neos\ContentRepository\Debug\Explore\Tool\ToolMeta(shortName: 'session-increment', group: 'Test')]
+final class SessionFakeIncrementTool implements ToolInterface
 {
-    public int $executionCount = 0;
+    public static int $executionCount = 0;
+    public function __construct(private readonly SessionFakeCounter $counter) {}
     public function getMenuLabel(ToolContext $context): string { return 'Increment'; }
-    public function execute(ToolIOInterface $io, FakeCounter $counter): ?ToolContext
+    public function execute(ToolIOInterface $io): ?ToolContext
     {
-        $this->executionCount++;
-        return ToolContext::empty()->with('counter', new FakeCounter($counter->value + 1));
+        self::$executionCount++;
+        return ToolContext::empty()->with('counter', new SessionFakeCounter($this->counter->value + 1));
     }
 }
 
-final class ScriptedToolIO implements ToolIOInterface
+final class SessionScriptedToolIO implements ToolIOInterface
 {
     /** @var list<string> */
     private array $choices;
@@ -135,22 +161,14 @@ final class ScriptedToolIO implements ToolIOInterface
     public function writeNote(string $message): void {}
     public function chooseFromTable(string $question, array $headers, array $rows): string { return (string)array_key_first($rows); }
     public function ask(string $question, ?callable $autocomplete = null): string { return ''; }
-
     public function confirm(string $question, bool $default = false): bool { return $default; }
     public function progress(string $label, int $total, \Closure $callback): void { $callback(static function(): void {}); }
     public function chooseMultiple(string $question, array $choices, array $default = []): array { return $default; }
+    public function task(string $label, \Closure $callback): void { $callback(); }
 
     public function chooseFromMenu(ToolMenu $menu): string
     {
-        // Capture all item labels for assertions (mirrors old renderedChoiceLabels behaviour)
         $this->renderedChoiceLabels = array_map(fn($item) => $item->label, $menu->items);
-
-        $queued = array_shift($this->choices) ?? '0';
-        // Support numeric index (backward-compat) or short-name directly
-        if (is_numeric($queued)) {
-            $available = $menu->available();
-            return $available[(int)$queued]->shortName ?? '';
-        }
-        return $queued;
+        return array_shift($this->choices) ?? $menu->available()[0]->shortName ?? '';
     }
 }

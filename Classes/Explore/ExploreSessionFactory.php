@@ -19,7 +19,6 @@ use Neos\ContentRepository\Debug\InternalServices\EventStoreDebuggingInternalsFa
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\EventStore\EventStoreInterface;
 use Neos\Flow\Annotations as Flow;
-use Neos\Flow\ObjectManagement\ObjectManagerInterface;
 use Neos\Flow\Reflection\ReflectionService;
 
 /**
@@ -33,13 +32,11 @@ final class ExploreSessionFactory
     #[Flow\Inject]
     protected ReflectionService $reflectionService;
 
-    #[Flow\Inject]
-    protected ObjectManagerInterface $objectManager;
-
     public function __construct(
         private readonly ContentRepositoryRegistry $contentRepositoryRegistry,
         private readonly ToolContextRegistry $registry,
         private readonly ToolContextSerializer $serializer,
+        private readonly ToolBuilder $builder,
     ) {}
 
     /**
@@ -50,14 +47,12 @@ final class ExploreSessionFactory
     {
         $this->registerCoreContextTypes();
 
-        $tools = array_map(
-            fn(string $className) => $this->objectManager->get($className),
-            $this->reflectionService->getAllImplementationClassNamesForInterface(ToolInterface::class),
-        );
+        $toolClasses = $this->reflectionService->getAllImplementationClassNamesForInterface(ToolInterface::class);
 
         return new ToolDispatcher(
             $this->registry,
-            $tools,
+            $this->builder,
+            $toolClasses,
             $this->buildDerivedResolvers(),
             $this->buildDerivedDependencies(),
         );
@@ -84,6 +79,23 @@ final class ExploreSessionFactory
         return $this->registry;
     }
 
+    /**
+     * Build a {@see ScriptToolRunner} for use in debug scripts.
+     * The runner maintains mutable context across tool calls and delegates to {@see ToolBuilder}
+     * for per-dispatch tool construction.
+     */
+    public function buildScriptToolRunner(ToolContext $context): \Neos\ContentRepository\Debug\Explore\Script\ScriptToolRunner
+    {
+        $this->registerCoreContextTypes();
+        $dispatcher = $this->buildDispatcher();
+        return new \Neos\ContentRepository\Debug\Explore\Script\ScriptToolRunner(
+            $dispatcher,
+            $this->builder,
+            $this->buildDerivedResolvers(),
+            $context,
+        );
+    }
+
     private function registerCoreContextTypes(): void
     {
         $this->registry->register(
@@ -99,7 +111,6 @@ final class ExploreSessionFactory
             alias: 'n',
             fromString: NodeAggregateId::fromString(...),
             toString: fn(NodeAggregateId $v) => (string)$v,
-            // TODO: WELCHES TOOL FALLS KONTEXT NICHT GIBT???
         );
         $this->registry->register(
             name: 'workspace',
@@ -119,7 +130,7 @@ final class ExploreSessionFactory
 
     /**
      * Maps each derived type to the registered context types it depends on,
-     * so {@see ToolDispatcher::missingContextTypes()} can report what's missing.
+     * so {@see ToolBuilder::missingContextTypes()} can report what's missing.
      *
      * @return array<class-string, list<class-string>>
      */

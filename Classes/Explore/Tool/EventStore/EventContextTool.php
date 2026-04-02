@@ -25,15 +25,17 @@ final class EventContextTool implements ToolInterface
 {
     private const int WINDOW = 10;
 
+    public function __construct(
+        private readonly EventStoreInterface $eventStore,
+    ) {}
+
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Event store: context around sequence number';
     }
 
-    public function execute(
-        ToolIOInterface $io,
-        EventStoreInterface $eventStore,
-    ): ?ToolContext {
+    public function execute(ToolIOInterface $io): ?ToolContext
+    {
         $input = $io->ask('Sequence number');
         $target = (int) $input;
         if ($target < 1) {
@@ -43,7 +45,7 @@ final class EventContextTool implements ToolInterface
 
         $min = max(1, $target - self::WINDOW);
 
-        $stream = $eventStore->load(VirtualStreamName::all())
+        $stream = $this->eventStore->load(VirtualStreamName::all())
             ->withMinimumSequenceNumber(SequenceNumber::fromInteger($min))
             ->withMaximumSequenceNumber(SequenceNumber::fromInteger($target + self::WINDOW));
 

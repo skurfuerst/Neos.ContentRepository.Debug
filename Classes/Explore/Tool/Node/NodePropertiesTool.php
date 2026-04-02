@@ -19,16 +19,21 @@ use Neos\ContentRepository\Debug\Explore\ToolContext;
 #[ToolMeta(shortName: 'nProps', group: 'Nodes')]
 final class NodePropertiesTool implements ToolInterface
 {
+    public function __construct(
+        private readonly ContentSubgraphInterface $subgraph,
+        private readonly NodeAggregateId $node,
+    ) {}
+
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Node: properties';
     }
 
-    public function execute(ToolIOInterface $io, ContentSubgraphInterface $subgraph, NodeAggregateId $node): ?ToolContext
+    public function execute(ToolIOInterface $io): ?ToolContext
     {
-        $foundNode = $subgraph->findNodeById($node);
+        $foundNode = $this->subgraph->findNodeById($this->node);
         if ($foundNode === null) {
-            $io->writeError(sprintf('Node "%s" not found in this subgraph.', $node->value));
+            $io->writeError(sprintf('Node "%s" not found in this subgraph.', $this->node->value));
             return null;
         }
 

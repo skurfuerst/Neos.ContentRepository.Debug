@@ -36,19 +36,26 @@ class ContentRepositoryDebugger
         $this->watches = new WatchList();
     }
 
-    public function execScriptFile(string $debugScriptFileName, ContentRepositoryId $contentRepositoryId): void
-    {
+    public function execScriptFile(
+        string $debugScriptFileName,
+        ContentRepositoryId $contentRepositoryId,
+        ?\Neos\ContentRepository\Debug\Explore\Script\ScriptToolRunner $tools = null,
+    ): void {
         if (!file_exists($debugScriptFileName)) {
             throw new \InvalidArgumentException('ERROR: Debug Script File not found: ' . $debugScriptFileName);
         }
 
-        $executor = static function (ContentRepositoryDebugger $dbg, ContentRepository $cr) use ($debugScriptFileName) {
+        $executor = static function (
+            ContentRepositoryDebugger $dbg,
+            ContentRepository $cr,
+            ?ScriptToolRunner $tools,
+        ) use ($debugScriptFileName) {
             include $debugScriptFileName;
         };
 
         $this->contentRepository = $this->contentRepositoryRegistry->get($contentRepositoryId);
 
-        $executor(dbg: $this, cr: $this->contentRepository);
+        $executor(dbg: $this, cr: $this->contentRepository, tools: $tools);
     }
 
     public function setupCr(string $target, bool $prune = false): ContentRepository

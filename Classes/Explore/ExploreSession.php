@@ -43,7 +43,10 @@ final class ExploreSession
 
     public function run(ToolContext $context, ToolIOInterface $io): void
     {
-        /** @var array<class-string, true>|null $baselineToolSet null on first iteration (don't mark anything as new) */
+        // Bootstrap: notify tools before the first menu render
+        $this->dispatcher->notifyContextChange(ToolContext::empty(), $context, $io);
+
+        /** @var array<string, true>|null $baselineToolSet null on first iteration (don't mark anything as new) */
         $baselineToolSet = null;
         $contextJustChanged = false;
 
@@ -54,12 +57,12 @@ final class ExploreSession
             $menu = $this->dispatcher->buildMenu($context, $contextDisplay);
             $available = $menu->available();
 
-            // Auto-run tools on every context change (e.g. NodeIdentityTool re-runs when navigating nodes)
+            // Auto-run tools on every context change (e.g. NodeInfoTool re-runs when navigating nodes)
             if ($contextJustChanged) {
-                foreach ($menu->availableAutoRun() as $autoTool) {
+                foreach ($menu->availableAutoRun() as $autoItem) {
                     $io->writeLine('');
-                    $io->writeInfo('---' . $autoTool->tool->getMenuLabel($context) . ' ---');
-                    $this->dispatcher->execute($autoTool->tool, $context, $io);
+                    $io->writeInfo('--- ' . $autoItem->label . ' ---');
+                    $this->dispatcher->execute($autoItem->toolClass, $context, $io);
                 }
             }
 
@@ -67,30 +70,32 @@ final class ExploreSession
             $item = $menu->findByShortName($shortName);
             // findByShortName is guaranteed non-null here: chooseFromMenu only returns valid, available short names
             assert($item !== null);
-            $tool = $item->tool;
 
             $io->writeLine('');
-            $io->writeInfo('# ' . $shortName . ': ' . $tool->getMenuLabel($context));
+            $io->writeInfo('# ' . $shortName . ': ' . $item->label);
 
-            $result = $this->dispatcher->execute($tool, $context, $io);
+            $result = $this->dispatcher->execute($item->toolClass, $context, $io);
 
             if ($result === self::exit()) {
                 return;
             }
 
             if ($result !== null) {
+                $oldContext = $context;
                 $context = $result;
+                // Notify tools immediately after context update (before next menu render)
+                $this->dispatcher->notifyContextChange($oldContext, $context, $io);
                 $contextJustChanged = true;
                 $baselineToolSet = [];
-                foreach ($available as $t) {
-                    $baselineToolSet[$t::class] = true;
+                foreach ($available as $availItem) {
+                    $baselineToolSet[$availItem->toolClass] = true;
                 }
             } else {
                 $contextJustChanged = false;
                 if ($baselineToolSet === null) {
                     $baselineToolSet = [];
-                    foreach ($available as $t) {
-                        $baselineToolSet[$t::class] = true;
+                    foreach ($available as $availItem) {
+                        $baselineToolSet[$availItem->toolClass] = true;
                     }
                 }
             }

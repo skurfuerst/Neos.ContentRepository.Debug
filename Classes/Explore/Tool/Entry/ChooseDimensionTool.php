@@ -23,19 +23,21 @@ use Neos\ContentRepository\Debug\Explore\ToolContext;
 #[ToolMeta(shortName: 'dsp', group: 'Dimensions')]
 final class ChooseDimensionTool implements ToolInterface
 {
+    public function __construct(
+        private readonly ToolContext $context,
+        private readonly ContentRepository $cr,
+        private readonly ?ContentGraphInterface $contentGraph = null,
+        private readonly ?NodeAggregateId $node = null,
+    ) {}
+
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Set dimension';
     }
 
-    public function execute(
-        ToolIOInterface $io,
-        ToolContext $context,
-        ContentRepository $cr,
-        ?ContentGraphInterface $contentGraph = null,
-        ?NodeAggregateId $node = null,
-    ): ?ToolContext {
-        $choices = $this->buildChoices($io, $cr, $contentGraph, $node);
+    public function execute(ToolIOInterface $io): ?ToolContext
+    {
+        $choices = $this->buildChoices($io, $this->cr, $this->contentGraph, $this->node);
         if ($choices === null) {
             return null;
         }
@@ -44,7 +46,7 @@ final class ChooseDimensionTool implements ToolInterface
         $selected = $io->chooseFromTable('Choose dimension space point', ['Dimension Space Point'], $rows);
         $io->writeInfo(sprintf('✔ Dimension set to: %s', $selected));
 
-        return $context->withFromString('dsp', $selected);
+        return $this->context->withFromString('dsp', $selected);
     }
 
     /** @return array<string, string>|null */

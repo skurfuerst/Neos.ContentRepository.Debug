@@ -13,7 +13,6 @@ use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
 use Neos\ContentRepositoryRegistry\Factory\EventStore\DoctrineEventStoreFactory;
-use Neos\Flow\Annotations as Flow;
 
 /**
  * @internal Shows the event history for a node aggregate by querying the event store directly.
@@ -23,27 +22,27 @@ use Neos\Flow\Annotations as Flow;
 #[ToolMeta(shortName: 'nHist', group: 'Events')]
 final class NodeHistoryTool implements ToolInterface
 {
-    #[Flow\Inject]
-    protected Connection $connection;
+    public function __construct(
+        private readonly Connection $connection,
+        private readonly ContentRepositoryId $cr,
+        private readonly NodeAggregateId $node,
+    ) {}
 
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Node: event history';
     }
 
-    public function execute(
-        ToolIOInterface $io,
-        ContentRepositoryId $cr,
-        NodeAggregateId $node,
-    ): ?ToolContext {
-        $tableName = DoctrineEventStoreFactory::databaseTableName($cr);
+    public function execute(ToolIOInterface $io): ?ToolContext
+    {
+        $tableName = DoctrineEventStoreFactory::databaseTableName($this->cr);
 
         $qb = $this->connection->createQueryBuilder();
         $qb->select('sequencenumber', 'type', 'payload', 'recordedat')
             ->from($tableName)
             ->where('JSON_EXTRACT(payload, :jsonPath) = :nodeId')
             ->setParameter('jsonPath', '$.nodeAggregateId')
-            ->setParameter('nodeId', $node->value)
+            ->setParameter('nodeId', $this->node->value)
             ->orderBy('sequencenumber', 'ASC');
 
         try {
@@ -60,7 +59,7 @@ final class NodeHistoryTool implements ToolInterface
             return null;
         }
 
-        $io->writeNote(sprintf('%d events for node %s', count($events), $node->value));
+        $io->writeNote(sprintf('%d events for node %s', count($events), $this->node->value));
         $io->writeLine('');
 
         $summarizer = new EventPayloadSummarizer();

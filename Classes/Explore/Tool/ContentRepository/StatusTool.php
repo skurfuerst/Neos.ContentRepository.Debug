@@ -13,8 +13,8 @@ use Neos\ContentRepository\Core\Subscription\SubscriptionStatus;
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
+use Neos\ContentRepository\Debug\Explore\Tool\WithContextChangeInterface;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
-use Neos\Flow\Annotations as Flow;
 
 /**
  * @internal Displays subscription status overview, detailed error info for broken projections,
@@ -22,24 +22,88 @@ use Neos\Flow\Annotations as Flow;
  * @see ContentRepositoryMaintainer::status() for the underlying status API.
  */
 #[ToolMeta(shortName: 'status', group: 'ContentRepository')]
-#[Flow\Scope('singleton')]
-final class StatusTool implements ToolInterface
+final class StatusTool implements ToolInterface, WithContextChangeInterface
 {
-    #[Flow\Inject]
-    protected Connection $dbal;
+    public function __construct(
+        private readonly Connection                  $dbal,
+        private readonly ContentRepositoryId         $cr,
+        private readonly ContentRepositoryMaintainer $maintainer,
+    )
+    {
+    }
 
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Subscription status & errors';
     }
 
-    public function execute(
-        ToolIOInterface $io,
-        ContentRepositoryMaintainer $maintainer,
-        ContentRepositoryId $cr,
-    ): ?ToolContext {
+    /**
+     * Quick subscription health-check on every CR change (and bootstrap).
+     * Shows a warning note for DETACHED or non-ACTIVE subscriptions without the full status table.
+     * Previously lived in CrCommandController::displaySubscriptionWarnings() — moved here so the
+     * session loop itself is responsible, not the CLI entry point.
+     *
+     * ContentRepositoryMaintainer is a derived type → pass 2 in notifyContextChange,
+     * which guarantees dynamic CR registration (pass 1) has already run. ✓
+     */
+    public function onContextChange(ToolContext $old, ToolContext $new, ToolIOInterface $io): void
+    {
+        $prevCrId = $old->getByType(ContentRepositoryId::class);
+        $nextCrId = $new->getByType(ContentRepositoryId::class);
+        if ($nextCrId !== null && $prevCrId !== null && $nextCrId->equals($prevCrId)) {
+            // nothing changed regarding to CR, so do not show
+            return;
+        } elseif ($nextCrId === null && $prevCrId === null) {
+            // no CR selected, and did not change
+            return;
+        }
         try {
-            $crStatus = $maintainer->status();
+            $crStatus = $this->maintainer->status();
+        } catch (\Throwable) {
+            return; // pre-setup or broken DB — don't block the session
+        }
+
+        $hasProblems = false;
+        foreach ($crStatus->subscriptionStatus as $status) {
+            if ($status instanceof DetachedSubscriptionStatus) {
+                $io->writeNote(sprintf(
+                    'Subscription "%s" is DETACHED at position %d',
+                    $status->subscriptionId->value,
+                    $status->subscriptionPosition->value,
+                ));
+                $hasProblems = true;
+                continue;
+            }
+            if ($status instanceof ProjectionSubscriptionStatus && $status->subscriptionStatus !== SubscriptionStatus::ACTIVE) {
+                if ($status->subscriptionStatus === SubscriptionStatus::ERROR) {
+                    $errorMsg = $status->subscriptionError?->errorMessage ?? '(no details)';
+                    $io->writeError(sprintf(
+                        'Subscription "%s" is in ERROR at position %d: %s',
+                        $status->subscriptionId->value,
+                        $status->subscriptionPosition->value,
+                        $errorMsg,
+                    ));
+                } else {
+                    $io->writeNote(sprintf(
+                        'Subscription "%s" is %s at position %d',
+                        $status->subscriptionId->value,
+                        $status->subscriptionStatus->value,
+                        $status->subscriptionPosition->value,
+                    ));
+                }
+                $hasProblems = true;
+            }
+        }
+
+        if ($hasProblems) {
+            $io->writeNote('Use "status" for full stack traces.');
+        }
+    }
+
+    public function execute(ToolIOInterface $io): ?ToolContext
+    {
+        try {
+            $crStatus = $this->maintainer->status();
         } catch (\Throwable $e) {
             $io->writeError('Could not retrieve status: ' . $e->getMessage());
             return null;
@@ -58,7 +122,7 @@ final class StatusTool implements ToolInterface
                 $rows[] = [
                     $status->subscriptionId->value,
                     'DETACHED',
-                    (string) $status->subscriptionPosition->value,
+                    (string)$status->subscriptionPosition->value,
                 ];
                 continue;
             }
@@ -68,7 +132,7 @@ final class StatusTool implements ToolInterface
                 $rows[] = [
                     $status->subscriptionId->value,
                     $statusLabel,
-                    (string) $status->subscriptionPosition->value,
+                    (string)$status->subscriptionPosition->value,
                 ];
 
                 if ($status->subscriptionStatus === SubscriptionStatus::ERROR && $status->subscriptionError !== null) {
@@ -84,7 +148,7 @@ final class StatusTool implements ToolInterface
 
         $io->writeTable(['Subscription', 'Status', 'Position'], $rows);
 
-        $this->writeTableSizes($io, $cr);
+        $this->writeTableSizes($io);
 
         foreach ($errorDetails as $status) {
             $io->writeLine('');
@@ -103,9 +167,9 @@ final class StatusTool implements ToolInterface
         return null;
     }
 
-    private function writeTableSizes(ToolIOInterface $io, ContentRepositoryId $cr): void
+    private function writeTableSizes(ToolIOInterface $io): void
     {
-        $prefix = 'cr_' . $cr->value . '_';
+        $prefix = 'cr_' . $this->cr->value . '_';
         /** @var list<string> $tables */
         $tables = $this->dbal->fetchFirstColumn(
             'SELECT table_name FROM information_schema.tables

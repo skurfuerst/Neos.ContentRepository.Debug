@@ -15,10 +15,10 @@ run = 'docker compose -f ../../../docker-compose.yml exec neos bash -c "cd /app 
 description = "Run a specific unit test file (usage: mise run test:unit Tests/Unit/Explore/ToolContextTest.php)"
 run = 'docker compose -f ../../../docker-compose.yml exec neos bash -c "cd /app && bin/phpunit -c Build/BuildEssentials/PhpUnit/UnitTests.xml --colors DistributionPackages/Neos.ContentRepository.Debug/$1"'
 
-[tasks."cr:explore"]
-description = "Run the interactive CR explorer (pass args after --: mise run cr:explore -- --node=abc)"
+[tasks."cr:debug"]
+description = "Run the interactive CR debugger (pass args after --: mise run cr:debug -- --node=abc)"
 run = '''
-docker compose -f ../../../docker-compose.yml exec neos bash -c 'cd /app && ./flow cr:explore "$@"' -- "$@"
+docker compose -f ../../../docker-compose.yml exec neos bash -c 'cd /app && ./flow cr:debug "$@"' -- "$@"
 '''
 
 [tasks."test:behavior"]

@@ -6,8 +6,6 @@ namespace Neos\ContentRepository\Debug\Explore\MCP;
 
 use Neos\ContentRepository\Debug\Explore\ExploreSession;
 use Neos\ContentRepository\Debug\Explore\ExploreSessionFactory;
-use Neos\ContentRepository\Debug\Explore\Tool\AutoRunToolInterface;
-use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
 use Neos\ContentRepository\Debug\Explore\ToolDispatcher;
 use Neos\Flow\Annotations as Flow;
@@ -53,8 +51,16 @@ final class ExploreToolDispatcherTool
                 ];
             }
 
-            $tool = $this->findToolByShortName($toolName, $dispatcher->availableTools($context));
-            if ($tool === null) {
+            $menu = $dispatcher->buildMenu($context);
+            $toolItem = null;
+            foreach ($menu->available() as $item) {
+                $parts = explode('\\', $item->toolClass);
+                if (end($parts) === $toolName) {
+                    $toolItem = $item;
+                    break;
+                }
+            }
+            if ($toolItem === null) {
                 return sprintf(
                     'Tool "%s" is not available in the current context. Available: %s',
                     $toolName,
@@ -63,7 +69,7 @@ final class ExploreToolDispatcherTool
             }
 
             $io = new McpToolIO($answers);
-            $result = $dispatcher->execute($tool, $context, $io);
+            $result = $dispatcher->execute($toolItem->toolClass, $context, $io);
 
             // Handle exit sentinel
             if ($result === ExploreSession::exit()) {
@@ -78,10 +84,8 @@ final class ExploreToolDispatcherTool
                 $context = $result;
 
                 // Auto-run tools on context change
-                foreach ($dispatcher->availableTools($context) as $autoTool) {
-                    if ($autoTool instanceof AutoRunToolInterface) {
-                        $dispatcher->execute($autoTool, $context, $io);
-                    }
+                foreach ($dispatcher->buildMenu($context)->availableAutoRun() as $autoItem) {
+                    $dispatcher->execute($autoItem->toolClass, $context, $io);
                 }
             }
 
@@ -106,26 +110,14 @@ final class ExploreToolDispatcherTool
     }
 
     /**
-     * @param list<ToolInterface> $availableTools
-     */
-    private function findToolByShortName(string $shortName, array $availableTools): ?ToolInterface
-    {
-        foreach ($availableTools as $tool) {
-            if ((new \ReflectionClass($tool))->getShortName() === $shortName) {
-                return $tool;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * @return array<string, string> tool short name => menu label
+     * @return array<string, string> tool class basename => menu label
      */
     private function buildAvailableToolsList(ToolDispatcher $dispatcher, ToolContext $context): array
     {
         $tools = [];
-        foreach ($dispatcher->availableTools($context) as $tool) {
-            $tools[(new \ReflectionClass($tool))->getShortName()] = $tool->getMenuLabel($context);
+        foreach ($dispatcher->buildMenu($context)->available() as $item) {
+            $parts = explode('\\', $item->toolClass);
+            $tools[end($parts)] = $item->label;
         }
         return $tools;
     }

@@ -4,113 +4,107 @@ declare(strict_types=1);
 
 namespace Neos\ContentRepository\Debug\Tests\Unit\Explore;
 
+use Neos\ContentRepository\Debug\Explore\ToolBuilder;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
 use Neos\ContentRepository\Debug\Explore\ToolContextRegistry;
 use Neos\ContentRepository\Debug\Explore\ToolDispatcher;
 use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\ToolMenu;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
+use Neos\Flow\ObjectManagement\ObjectManagerInterface;
+use Neos\Flow\Reflection\ReflectionService;
 use PHPUnit\Framework\TestCase;
 
 class ToolDispatcherTest extends TestCase
 {
     private ToolContextRegistry $registry;
+    private ToolBuilder $builder;
 
     protected function setUp(): void
     {
         $this->registry = new ToolContextRegistry();
         $this->registry->register(
             name: 'node',
-            type: FakeNodeAggregateId::class,
+            type: DispFakeNodeId::class,
             alias: 'n',
-            fromString: fn(string $s) => new FakeNodeAggregateId($s),
-            toString: fn(FakeNodeAggregateId $v) => $v->value,
+            fromString: fn(string $s) => new DispFakeNodeId($s),
+            toString: fn(DispFakeNodeId $v) => $v->value,
         );
+        $this->builder = $this->makeBuilder($this->registry);
     }
 
     public function test_tool_with_no_required_params_is_always_available(): void
     {
-        $tool = new AlwaysAvailableTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$tool]);
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [DispAlwaysAvailableTool::class]);
 
-        $available = $dispatcher->availableTools(ToolContext::empty());
+        $menu = $dispatcher->buildMenu(ToolContext::empty());
 
-        self::assertContains($tool, $available);
+        self::assertTrue($menu->available() !== []);
+        self::assertSame(DispAlwaysAvailableTool::class, $menu->available()[0]->toolClass);
     }
 
     public function test_tool_requiring_node_is_unavailable_without_it(): void
     {
-        $tool = new RequiresNodeTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$tool]);
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [DispRequiresNodeTool::class]);
 
-        $available = $dispatcher->availableTools(ToolContext::empty());
+        $menu = $dispatcher->buildMenu(ToolContext::empty());
 
-        self::assertNotContains($tool, $available);
+        self::assertSame([], $menu->available());
     }
 
     public function test_tool_requiring_node_is_available_with_it(): void
     {
-        $tool = new RequiresNodeTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$tool]);
-        $ctx = ToolContext::empty()->with('node', new FakeNodeAggregateId('abc'));
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [DispRequiresNodeTool::class]);
+        $ctx = ToolContext::empty()->with('node', new DispFakeNodeId('abc'));
 
-        $available = $dispatcher->availableTools($ctx);
+        $menu = $dispatcher->buildMenu($ctx);
 
-        self::assertContains($tool, $available);
+        self::assertNotSame([], $menu->available());
+        self::assertSame(DispRequiresNodeTool::class, $menu->available()[0]->toolClass);
     }
 
     public function test_tool_with_optional_param_is_always_available(): void
     {
-        $tool = new OptionalNodeTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$tool]);
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [DispOptionalNodeTool::class]);
 
-        self::assertContains($tool, $dispatcher->availableTools(ToolContext::empty()));
-        $ctx = ToolContext::empty()->with('node', new FakeNodeAggregateId('abc'));
-        self::assertContains($tool, $dispatcher->availableTools($ctx));
+        self::assertNotSame([], $dispatcher->buildMenu(ToolContext::empty())->available());
+        $ctx = ToolContext::empty()->with('node', new DispFakeNodeId('abc'));
+        self::assertNotSame([], $dispatcher->buildMenu($ctx)->available());
     }
 
-    public function test_execute_passes_context_values_to_tool(): void
+    public function test_execute_runs_tool_and_returns_result(): void
     {
-        $tool = new RequiresNodeTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$tool]);
-        $io = new FakeToolIO();
-        $ctx = ToolContext::empty()->with('node', new FakeNodeAggregateId('abc'));
-
-        $dispatcher->execute($tool, $ctx, $io);
-
-        self::assertSame('abc', $tool->receivedNode?->value);
-    }
-
-    public function test_execute_returns_updated_context(): void
-    {
-        $tool = new ContextUpdatingTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$tool]);
-        $io = new FakeToolIO();
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [DispContextUpdatingTool::class]);
+        $io = new DispFakeToolIO();
         $ctx = ToolContext::empty();
 
-        $newCtx = $dispatcher->execute($tool, $ctx, $io);
+        $newCtx = $dispatcher->execute(DispContextUpdatingTool::class, $ctx, $io);
 
         self::assertNotNull($newCtx);
         self::assertTrue($newCtx->has('node'));
     }
 
-    public function test_boot_validation_rejects_unrecognised_parameter_type(): void
+    public function test_execute_passes_context_values_via_constructor(): void
     {
-        $this->expectException(\LogicException::class);
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [DispNodeEchoTool::class]);
+        $io = new DispFakeToolIO();
+        $ctx = ToolContext::empty()->with('node', new DispFakeNodeId('abc'));
 
-        new ToolDispatcher($this->registry, [new UnknownParamTool()]);
+        $dispatcher->execute(DispNodeEchoTool::class, $ctx, $io);
+
+        self::assertStringContainsString('abc', $io->output);
     }
 
-    public function test_tool_context_parameter_is_always_accepted_and_injected(): void
+    public function test_execute_injects_tool_context_via_constructor(): void
     {
-        $tool = new ContextPassthroughTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$tool]);
-        $io = new FakeToolIO();
-        $ctx = ToolContext::empty()->with('node', new FakeNodeAggregateId('xyz'));
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [DispContextPassthroughTool::class]);
+        $io = new DispFakeToolIO();
+        $ctx = ToolContext::empty()->with('node', new DispFakeNodeId('xyz'));
 
-        $dispatcher->execute($tool, $ctx, $io);
+        $result = $dispatcher->execute(DispContextPassthroughTool::class, $ctx, $io);
 
-        self::assertSame($ctx, $tool->receivedContext);
+        // Tool returns the context it was given — verify it round-trips
+        self::assertSame($ctx, $result);
     }
 
     // --- Derived resolvers ---
@@ -118,167 +112,182 @@ class ToolDispatcherTest extends TestCase
     public function test_derived_type_passes_validation(): void
     {
         $this->expectNotToPerformAssertions();
-        new ToolDispatcher($this->registry, [new DerivedParamTool()], [
-            FakeDerivedService::class => fn(ToolContext $ctx) => new FakeDerivedService('resolved'),
+        new ToolDispatcher($this->registry, $this->builder, [DispDerivedParamTool::class], [
+            DispFakeDerivedService::class => fn(ToolContext $ctx) => new DispFakeDerivedService('resolved'),
         ]);
     }
 
     public function test_derived_type_tool_available_when_resolver_returns_value(): void
     {
-        $tool = new DerivedParamTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$tool], [
-            FakeDerivedService::class => fn(ToolContext $ctx) => new FakeDerivedService('resolved'),
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [DispDerivedParamTool::class], [
+            DispFakeDerivedService::class => fn(ToolContext $ctx) => new DispFakeDerivedService('resolved'),
         ]);
 
-        self::assertContains($tool, $dispatcher->availableTools(ToolContext::empty()));
+        self::assertNotSame([], $dispatcher->buildMenu(ToolContext::empty())->available());
     }
 
     public function test_derived_type_tool_unavailable_when_resolver_returns_null(): void
     {
-        $tool = new DerivedParamTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$tool], [
-            FakeDerivedService::class => fn(ToolContext $ctx) => null,
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [DispDerivedParamTool::class], [
+            DispFakeDerivedService::class => fn(ToolContext $ctx) => null,
         ]);
 
-        self::assertNotContains($tool, $dispatcher->availableTools(ToolContext::empty()));
+        self::assertSame([], $dispatcher->buildMenu(ToolContext::empty())->available());
     }
 
     public function test_unavailable_derived_type_reports_missing_underlying_context_types(): void
     {
-        // Register additional context types that the derived resolver depends on
         $this->registry->register(
             name: 'workspace',
-            type: FakeWorkspaceName::class,
+            type: DispFakeWorkspaceName::class,
             alias: 'ws',
-            fromString: fn(string $s) => new FakeWorkspaceName($s),
-            toString: fn(FakeWorkspaceName $v) => $v->value,
+            fromString: fn(string $s) => new DispFakeWorkspaceName($s),
+            toString: fn(DispFakeWorkspaceName $v) => $v->value,
         );
-
-        $tool = new DerivedParamTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$tool], derivedResolvers: [
-            FakeDerivedService::class => fn(ToolContext $ctx) => null,
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [DispDerivedParamTool::class], derivedResolvers: [
+            DispFakeDerivedService::class => fn(ToolContext $ctx) => null,
         ], derivedDependencies: [
-            FakeDerivedService::class => [FakeNodeAggregateId::class, FakeWorkspaceName::class],
+            DispFakeDerivedService::class => [DispFakeNodeId::class, DispFakeWorkspaceName::class],
         ]);
 
-        // Context has node but NOT workspace — derived resolver returns null
-        $ctx = ToolContext::empty()->with('node', new FakeNodeAggregateId('abc'));
+        $ctx = ToolContext::empty()->with('node', new DispFakeNodeId('abc'));
         $menu = $dispatcher->buildMenu($ctx);
 
-        $item = $menu->findByShortName('derived-param');
+        $item = $menu->findByShortName('disp-derived-param');
         self::assertNotNull($item);
         self::assertFalse($item->available);
-        // Should report 'workspace' as missing (node is present, workspace is not)
         self::assertContains('workspace', $item->missingContextTypes);
         self::assertNotContains('node', $item->missingContextTypes);
     }
 
-    public function test_derived_type_is_injected_into_execute(): void
+    public function test_derived_type_is_injected_via_constructor(): void
     {
-        $tool = new DerivedParamTool();
-        $dispatcher = new ToolDispatcher($this->registry, [$tool], [
-            FakeDerivedService::class => fn(ToolContext $ctx) => new FakeDerivedService('injected'),
+        $dispatcher = new ToolDispatcher($this->registry, $this->builder, [DispDerivedParamTool::class], [
+            DispFakeDerivedService::class => fn(ToolContext $ctx) => new DispFakeDerivedService('injected'),
         ]);
-        $io = new FakeToolIO();
+        $io = new DispFakeToolIO();
 
-        $dispatcher->execute($tool, ToolContext::empty(), $io);
+        $dispatcher->execute(DispDerivedParamTool::class, ToolContext::empty(), $io);
 
-        self::assertSame('injected', $tool->receivedService?->label);
+        self::assertStringContainsString('injected', $io->output);
+    }
+
+    // --- Helpers ---
+
+    private function makeBuilder(ToolContextRegistry $registry): ToolBuilder
+    {
+        // ReflectionService returns empty → ToolBuilder falls back to native PHP reflection
+        $reflectionService = $this->createStub(ReflectionService::class);
+        $reflectionService->method('getMethodParameters')->willReturn([]);
+
+        // ObjectManager throws → tests fail if a fake accidentally requires ObjectManager resolution
+        $objectManager = $this->createStub(ObjectManagerInterface::class);
+        $objectManager->method('get')->willThrowException(new \RuntimeException('ObjectManager not available in unit tests'));
+
+        return new ToolBuilder($registry, $objectManager, $reflectionService);
     }
 }
 
 // --- Fake value objects ---
 
-final class FakeNodeAggregateId
+final class DispFakeNodeId
 {
     public function __construct(public readonly string $value) {}
 }
 
-final class FakeWorkspaceName
+final class DispFakeWorkspaceName
 {
     public function __construct(public readonly string $value) {}
 }
 
-// --- Fake tools ---
+// --- Fake tools (constructor injection) ---
 
-final class AlwaysAvailableTool implements ToolInterface
+#[\Neos\ContentRepository\Debug\Explore\Tool\ToolMeta(shortName: 'disp-always', group: 'Test')]
+final class DispAlwaysAvailableTool implements ToolInterface
 {
+    public function __construct() {}
     public function getMenuLabel(ToolContext $context): string { return 'Always available'; }
     public function execute(ToolIOInterface $io): ?ToolContext { return null; }
 }
 
-final class RequiresNodeTool implements ToolInterface
+#[\Neos\ContentRepository\Debug\Explore\Tool\ToolMeta(shortName: 'disp-requires-node', group: 'Test')]
+final class DispRequiresNodeTool implements ToolInterface
 {
-    public ?FakeNodeAggregateId $receivedNode = null;
-
+    public function __construct(private readonly DispFakeNodeId $node) {}
     public function getMenuLabel(ToolContext $context): string { return 'Requires node'; }
-    public function execute(ToolIOInterface $io, FakeNodeAggregateId $node): ?ToolContext
-    {
-        $this->receivedNode = $node;
-        return null;
-    }
+    public function execute(ToolIOInterface $io): ?ToolContext { return null; }
 }
 
-final class OptionalNodeTool implements ToolInterface
+#[\Neos\ContentRepository\Debug\Explore\Tool\ToolMeta(shortName: 'disp-optional-node', group: 'Test')]
+final class DispOptionalNodeTool implements ToolInterface
 {
+    public function __construct(private readonly ?DispFakeNodeId $node = null) {}
     public function getMenuLabel(ToolContext $context): string { return 'Optional node'; }
-    public function execute(ToolIOInterface $io, ?FakeNodeAggregateId $node = null): ?ToolContext { return null; }
+    public function execute(ToolIOInterface $io): ?ToolContext { return null; }
 }
 
-final class ContextUpdatingTool implements ToolInterface
+#[\Neos\ContentRepository\Debug\Explore\Tool\ToolMeta(shortName: 'disp-context-updating', group: 'Test')]
+final class DispContextUpdatingTool implements ToolInterface
 {
+    public function __construct() {}
     public function getMenuLabel(ToolContext $context): string { return 'Updates context'; }
     public function execute(ToolIOInterface $io): ?ToolContext
     {
-        return ToolContext::empty()->with('node', new FakeNodeAggregateId('new'));
+        return ToolContext::empty()->with('node', new DispFakeNodeId('new'));
     }
 }
 
-final class ContextPassthroughTool implements ToolInterface
+#[\Neos\ContentRepository\Debug\Explore\Tool\ToolMeta(shortName: 'disp-node-echo', group: 'Test')]
+final class DispNodeEchoTool implements ToolInterface
 {
-    public ?ToolContext $receivedContext = null;
+    public function __construct(private readonly DispFakeNodeId $node) {}
+    public function getMenuLabel(ToolContext $context): string { return 'Node echo'; }
+    public function execute(ToolIOInterface $io): ?ToolContext
+    {
+        $io->writeLine($this->node->value);
+        return null;
+    }
+}
+
+#[\Neos\ContentRepository\Debug\Explore\Tool\ToolMeta(shortName: 'disp-context-passthrough', group: 'Test')]
+final class DispContextPassthroughTool implements ToolInterface
+{
+    public function __construct(private readonly ToolContext $context) {}
     public function getMenuLabel(ToolContext $context): string { return 'Context passthrough'; }
-    public function execute(ToolIOInterface $io, ToolContext $context): ?ToolContext
-    {
-        $this->receivedContext = $context;
-        return null;
-    }
+    public function execute(ToolIOInterface $io): ?ToolContext { return $this->context; }
 }
 
-final class UnknownParamTool implements ToolInterface
+#[\Neos\ContentRepository\Debug\Explore\Tool\ToolMeta(shortName: 'disp-derived-param', group: 'Test')]
+final class DispDerivedParamTool implements ToolInterface
 {
-    public function getMenuLabel(ToolContext $context): string { return 'Unknown param'; }
-    public function execute(ToolIOInterface $io, \DateTimeImmutable $unknown): ?ToolContext { return null; }
-}
-
-final class DerivedParamTool implements ToolInterface
-{
-    public ?FakeDerivedService $receivedService = null;
+    public function __construct(private readonly DispFakeDerivedService $service) {}
     public function getMenuLabel(ToolContext $context): string { return 'Derived param'; }
-    public function execute(ToolIOInterface $io, FakeDerivedService $service): ?ToolContext
+    public function execute(ToolIOInterface $io): ?ToolContext
     {
-        $this->receivedService = $service;
+        $io->writeLine($this->service->label);
         return null;
     }
 }
 
-final class FakeDerivedService
+final class DispFakeDerivedService
 {
     public function __construct(public readonly string $label) {}
 }
 
-final class FakeToolIO implements ToolIOInterface
+final class DispFakeToolIO implements ToolIOInterface
 {
+    public string $output = '';
     public function writeTable(array $headers, array $rows): void {}
     public function writeKeyValue(array $pairs): void {}
-    public function writeLine(string $text = ''): void {}
-    public function writeError(string $message): void {}
-    public function writeInfo(string $message): void {}
-    public function writeNote(string $message): void {}
+    public function writeLine(string $text = ''): void { $this->output .= $text . "\n"; }
+    public function writeError(string $message): void { $this->output .= 'ERROR: ' . $message . "\n"; }
+    public function writeInfo(string $message): void { $this->output .= $message . "\n"; }
+    public function writeNote(string $message): void { $this->output .= $message . "\n"; }
     public function chooseFromTable(string $question, array $headers, array $rows): string { return (string)array_key_first($rows); }
     public function ask(string $question, ?callable $autocomplete = null): string { return ''; }
     public function confirm(string $question, bool $default = false): bool { return $default; }
     public function progress(string $label, int $total, \Closure $callback): void { $callback(static function(): void {}); }
     public function chooseMultiple(string $question, array $choices, array $default = []): array { return $default; }
     public function chooseFromMenu(ToolMenu $menu): string { return $menu->available()[0]->shortName ?? ''; }
+    public function task(string $label, \Closure $callback): void { $callback(); }
 }

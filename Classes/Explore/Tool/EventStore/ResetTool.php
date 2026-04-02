@@ -11,7 +11,6 @@ use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
 use Neos\ContentRepository\Debug\InternalServices\EventStoreDebuggingInternalsFactory;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
-use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Core\Bootstrap;
 
 /**
@@ -20,34 +19,31 @@ use Neos\Flow\Core\Bootstrap;
  * Only available in Development context. Follow up with {@see CatchUpTool} or ./flow subscription:replayAll.
  */
 #[ToolMeta(shortName: 'resetProjections', group: 'ContentRepository')]
-#[Flow\Scope('singleton')]
 final class ResetTool implements ToolInterface
 {
-    #[Flow\Inject]
-    protected ContentRepositoryRegistry $crRegistry;
-
-    #[Flow\Inject]
-    protected Bootstrap $bootstrap;
+    public function __construct(
+        private readonly ContentRepositoryRegistry $crRegistry,
+        private readonly Bootstrap $bootstrap,
+        private readonly ContentRepositoryId $cr,
+    ) {}
 
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Reset CR: truncate all projections (⚠ DEV only)';
     }
 
-    public function execute(
-        ToolIOInterface $io,
-        ContentRepositoryId $cr,
-    ): ?ToolContext {
+    public function execute(ToolIOInterface $io): ?ToolContext
+    {
         if (!$this->bootstrap->getContext()->isDevelopment()) {
             throw new \LogicException('ResetTool may only run in Development context.', 1748100001);
         }
 
-        if (!$io->confirm('TRUNCATE all projection tables and reset subscription positions for CR "' . $cr->value . '"?')) {
+        if (!$io->confirm('TRUNCATE all projection tables and reset subscription positions for CR "' . $this->cr->value . '"?')) {
             $io->writeLine('Aborted.');
             return null;
         }
 
-        $internals = $this->crRegistry->buildService($cr, new EventStoreDebuggingInternalsFactory());
+        $internals = $this->crRegistry->buildService($this->cr, new EventStoreDebuggingInternalsFactory());
         $internals->subscriptionEngine->reset();
 
         $io->writeInfo('Done. Run "catchUp" or ./flow subscription:replayAll to replay.');

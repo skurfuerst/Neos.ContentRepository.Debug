@@ -17,7 +17,6 @@ use Neos\ContentRepository\Debug\Explore\IO\ToolIOInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolInterface;
 use Neos\ContentRepository\Debug\Explore\Tool\ToolMeta;
 use Neos\ContentRepository\Debug\Explore\ToolContext;
-use Neos\Flow\Annotations as Flow;
 use Neos\Neos\Domain\NodeLabel\NodeLabelGeneratorInterface;
 use Neos\Neos\FrontendRouting\Projection\DocumentUriPathFinder;
 
@@ -36,24 +35,23 @@ final class DocumentTreeTool implements ToolInterface
 {
     private const MAX_LEVELS = 4;
 
-    #[Flow\Inject]
-    protected NodeLabelGeneratorInterface $nodeLabelGenerator;
+    public function __construct(
+        private readonly NodeLabelGeneratorInterface $nodeLabelGenerator,
+        private readonly ToolContext $context,
+        private readonly ContentSubgraphInterface $subgraph,
+        private readonly ContentRepository $cr,
+        private readonly DimensionSpacePoint $dsp,
+        private readonly ?NodeAggregateId $node = null,
+    ) {}
 
     public function getMenuLabel(ToolContext $context): string
     {
         return 'Document tree';
     }
 
-    public function execute(
-        ToolIOInterface          $io,
-        ToolContext              $context,
-        ContentSubgraphInterface $subgraph,
-        ContentRepository        $cr,
-        DimensionSpacePoint      $dsp,
-        ?NodeAggregateId         $node = null,
-    ): ?ToolContext
+    public function execute(ToolIOInterface $io): ?ToolContext
     {
-        $entryNodeId = $node ?? $this->findSiteNodeId($subgraph, $io);
+        $entryNodeId = $this->node ?? $this->findSiteNodeId($this->subgraph, $io);
         if ($entryNodeId === null) {
             return null;
         }
@@ -62,17 +60,17 @@ final class DocumentTreeTool implements ToolInterface
             nodeTypes: 'Neos.Neos:Document',
             maximumLevels: self::MAX_LEVELS,
         );
-        $subtree = $subgraph->findSubtree($entryNodeId, $filter);
+        $subtree = $this->subgraph->findSubtree($entryNodeId, $filter);
         if ($subtree === null) {
             $io->writeError('Node not found in this subgraph.');
             return null;
         }
 
-        $uriPathFinder = $this->resolveUriPathFinder($cr);
+        $uriPathFinder = $this->resolveUriPathFinder($this->cr);
 
         /** @var array<string, array<string>> $tableRows uuid => [label, uriPath, type, nodeName] */
         $tableRows = ['_stay' => ['(stay here)', '', '', '']];
-        $this->renderSubtree($subtree, $uriPathFinder, $dsp, '', true, $tableRows);
+        $this->renderSubtree($subtree, $uriPathFinder, $this->dsp, '', true, $tableRows);
 
         $selected = $io->chooseFromTable('Navigate to node', ['Label', 'URI Path', 'Type', 'Node Name'], $tableRows);
         if ($selected === '_stay') {
@@ -80,7 +78,7 @@ final class DocumentTreeTool implements ToolInterface
         }
 
         $io->writeInfo(sprintf('✔ Node set to: %s', $selected));
-        return $context->with('node', NodeAggregateId::fromString($selected));
+        return $this->context->with('node', NodeAggregateId::fromString($selected));
     }
 
     private function findSiteNodeId(ContentSubgraphInterface $subgraph, ToolIOInterface $io): ?NodeAggregateId
@@ -121,8 +119,7 @@ final class DocumentTreeTool implements ToolInterface
         string                 $prefix,
         bool                   $isLast,
         array                  &$tableRows,
-    ): void
-    {
+    ): void {
         $node = $subtree->node;
         $id = $node->aggregateId->value;
 
@@ -157,8 +154,7 @@ final class DocumentTreeTool implements ToolInterface
         ?DocumentUriPathFinder $finder,
         NodeAggregateId        $nodeId,
         DimensionSpacePoint    $dsp,
-    ): ?string
-    {
+    ): ?string {
         if ($finder === null) {
             return null;
         }
